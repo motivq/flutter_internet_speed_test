@@ -28,11 +28,11 @@ if (flutterVersionName == null) {
 android {
     namespace = "com.shaz.plugin.fist.flutter_internet_speed_test_example"
     compileSdkVersion flutter.compileSdkVersion
-    ndkVersion "27.1.12297006"
+    ndkVersion "27.2.12479018"
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_1_9
+        targetCompatibility JavaVersion.VERSION_1_9
     }
 
     kotlinOptions {
