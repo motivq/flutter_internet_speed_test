@@ -4,8 +4,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 Future<bool> isInternetAvailable() async {
   final connectivity = Connectivity();
-  final connectivityResult = await connectivity.checkConnectivity();
-  if (connectivityResult != ConnectivityResult.none) {
+  final connectivityResults = await connectivity.checkConnectivity();
+  if (connectivityResults.any((result) => result != ConnectivityResult.none)) {
     return true;
   }
 
