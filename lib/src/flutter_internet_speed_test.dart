@@ -3,6 +3,7 @@ import 'package:flutter_internet_speed_test/src/test_result.dart';
 
 import 'callbacks_enum.dart';
 import 'flutter_internet_speed_test_platform_interface.dart';
+import 'models/client.dart';
 import 'models/server_selection_response.dart';
 
 typedef DefaultCallback = void Function();
@@ -43,6 +44,8 @@ class FlutterInternetSpeedTest {
     String? uploadTestServer,
     int fileSizeInBytes = _defaultFileSize,
     bool useFastApi = true,
+    String? serverListUrl, // New parameter for server list URL
+    Map<String, dynamic>? additionalConfigs,
   }) async {
     if (_isTestInProgress) {
       return;
@@ -66,8 +69,11 @@ class FlutterInternetSpeedTest {
       if (onDefaultServerSelectionInProgress != null) {
         onDefaultServerSelectionInProgress();
       }
-      final serverSelectionResponse =
-          await FlutterInternetSpeedTestPlatform.instance.getDefaultServer();
+      ServerSelectionResponse? serverSelectionResponse =
+          await FlutterInternetSpeedTestPlatform.instance.getDefaultServer(
+        serverListUrl: serverListUrl,
+        additionalConfigs: additionalConfigs,
+      );
 
       if (onDefaultServerSelectionDone != null) {
         onDefaultServerSelectionDone(serverSelectionResponse?.client);
@@ -173,4 +179,8 @@ class FlutterInternetSpeedTest {
   }
 
   bool get isLogEnabled => FlutterInternetSpeedTestPlatform.instance.logEnabled;
+
+  Future<String?> getPlatformVersion() async {
+    return await FlutterInternetSpeedTestPlatform.instance.getPlatformVersion();
+  }
 }

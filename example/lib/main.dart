@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter_internet_speed_test/flutter_internet_speed_test.dart';
 
 void main() {
