@@ -72,7 +72,7 @@ function Speedtest() {
   this._selectedServer = null; //when using multiple points of test, this is the selected server
   this._settings = {}; //settings for the speedtest worker
   this._state = 0; //0=adding settings, 1=adding servers, 2=server selection done, 3=test running, 4=done
-  this.worker = new Worker("speedtest_worker.js?r=");// + Math.random());
+  this.worker = new Worker("speedtest_worker.js?r="+ Math.random());
 }
 
 const TestType = {
@@ -135,6 +135,14 @@ Speedtest.prototype = {
     } catch (e) {
       throw "Invalid server definition";
     }
+  },
+
+  getTestPoints: function() {
+    return this._serverList;
+  },
+
+  getSelectedServer: function() {
+    return this._selectedServer;
   },
 
   /**
@@ -443,13 +451,23 @@ Speedtest.prototype = {
       });
   },
 
+  // store a test name
+  _testName: null,
+  
+  getTestName: function() {
+    return this._testName;
+  },
+
   startDownloadTest: function() {
+    this._testName = "download";
     this.startRequestedTest(TestType.DOWNLOAD);
   },
   startUploadTest: function() {
+    this._testName = "upload";
     this.startRequestedTest(TestType.UPLOAD);
   },
   startPingTest: function() {
+    this._testName = "ping";
     this.startRequestedTest(TestType.PING);
   },
 
@@ -485,6 +503,12 @@ Speedtest.prototype = {
       var params = e.data.split(" ",2);
       var command = params[0];
       var dataJSON = e.data.substring(command.length) || "";
+
+      if(command === "currentStatus"){
+        console.log(this._testName + " currentStatus command received");
+      }
+
+
       if (command === "status") return; // do nothing
       if (command === "getSettings") return; // do nothing
       if (command === "setSettings") return; // do nothing
@@ -524,12 +548,14 @@ Speedtest.prototype = {
           case "finalPingTestResults":
             if (this.onend) this.onend(false, data.testType, data.pingStatus, data.jitterStatus);
             break;
-        }
+        }  
+        /*
         try {
           if (this.onend) this.onend(data.testState == 5, data.testType, data.finalSpeed);
         } catch (e) {
           throw new Error("Speedtest onend event threw exception: " + e);
         }
+        */
       }
       // update the UI
       try {
@@ -589,21 +615,21 @@ Speedtest.prototype = {
     var workerReference = this.worker;
     this.worker.onmessage = function(e) {
       
-      if(e.data === "settingsUpdated"){
-        workerReference.postMessage("getSettings");
-        return;
-      }
+      
       // split only on first space
       var params = e.data.split(" ",2);
       var command = params[0];
       var data = e.data.substring(command.length) || "";
 
+
       switch (command) {
-        case "currentSettings":
         case "settingsUpdated":
+          workerReference.postMessage("getSettings");
+          break;
+        case "currentSettings":
             // Process settings
             try {
-              currentSettings = JSON.parse(e.data.substring(15));
+              currentSettings = JSON.parse(data);
               workerReference.postMessage("getIp");
             } catch (error) {
                 console.error("Failed to parse settings:", error);
@@ -621,5 +647,41 @@ Speedtest.prototype = {
             console.warn("Unknown command:", command);
       }
     };
+  },
+
+  /**
+   * @returns {void}
+   * Resets the Speedtest object and the associated web worker.
+   */
+  reset: function(softReset = true) {
+    // Reset internal state
+    
+    
+    
+    if (!softReset) {
+      this._state = 0;
+      this._selectedServer = null;
+      this._serverList = [];
+      this._settings = {};
+      this._selectServerCalled = false;
+      //this.worker = new Worker("speedtest_worker.js?r=" + Math.random());
+    } else if (this._state > 2) {
+      this._state = 2; // Reset to server selected
+    }
+    this._prevData = null;
+    
+    
+
+    // Reset the worker
+    this.worker.postMessage("resetWorker");
+
+    // Clear any intervals or timeouts
+    if (this.updater) {
+      clearInterval(this.updater);
+      this.updater = null;
+    }
+
+    // Optionally, reinitialize the worker if needed
+    //this.worker = new Worker("speedtest_worker.js?r=" + Math.random());
   },
 };

@@ -9,4 +9,5 @@ class TestResult {
   TestResult(this.type, this.transferRate, this.unit,
       {int durationInMillis = 0})
       : durationInMillis = durationInMillis - (durationInMillis % 1000);
+  bool hasRan() => durationInMillis > 0;
 }

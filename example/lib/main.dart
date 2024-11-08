@@ -109,21 +109,25 @@ class _MyAppState extends State<MyApp> {
                         print(
                             'the transfer rate ${download.transferRate}, ${upload.transferRate}');
                       }
-                      setState(() {
-                        _downloadRate = download.transferRate;
-                        _unitText =
-                            download.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
-                        _downloadProgress = '100';
-                        _downloadCompletionTime = download.durationInMillis;
-                      });
-                      setState(() {
-                        _uploadRate = upload.transferRate;
-                        _unitText =
-                            upload.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
-                        _uploadProgress = '100';
-                        _uploadCompletionTime = upload.durationInMillis;
-                        _testInProgress = false;
-                      });
+                      if (download.hasRan()) {
+                        setState(() {
+                          _downloadRate = download.transferRate;
+                          _unitText =
+                              download.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
+                          _downloadProgress = '100';
+                          _downloadCompletionTime = download.durationInMillis;
+                        });
+                      }
+                      if (upload.hasRan()) {
+                        setState(() {
+                          _uploadRate = upload.transferRate;
+                          _unitText =
+                              upload.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
+                          _uploadProgress = '100';
+                          _uploadCompletionTime = upload.durationInMillis;
+                          _testInProgress = false;
+                        });
+                      }
                     }, onProgress: (double percent, TestResult data) {
                       if (kDebugMode) {
                         print(

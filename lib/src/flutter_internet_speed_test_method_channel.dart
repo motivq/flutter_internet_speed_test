@@ -233,7 +233,7 @@ class MethodChannelFlutterInternetSpeedTest
             return null; //TODO: what? // Return null if token is not found
           }
         } else {
-          serverUrl = Uri.parse(serverListUrl!);
+          serverUrl = Uri.parse(serverListUrl);
         }
 
         var serverResponse = await http.get(serverUrl);
@@ -279,5 +279,10 @@ class MethodChannelFlutterInternetSpeedTest
     final version =
         await methodChannel.invokeMethod<String>('getPlatformVersion');
     return version;
+  }
+
+  @override
+  Future<void> resetTest({bool softReset = false}) async {
+    return; //Nothing to do here
   }
 }

@@ -104,6 +104,10 @@ abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
     throw UnimplementedError('cancelTest() has not been implemented.');
   }
 
+  Future<void> resetTest({bool softReset = false}) {
+    throw UnimplementedError('resetTest() has not been implemented.');
+  }
+
   Future<String?> getPlatformVersion() {
     throw UnimplementedError('getPlatformVersion() has not been implemented.');
   }

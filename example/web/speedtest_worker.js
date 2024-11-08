@@ -113,6 +113,7 @@ function getCurrentRunningTest() {
 				return "Unknown";
 		}
 	}
+	return testType;
 }
 
 /*
@@ -123,72 +124,108 @@ function url_sep(url) {
 }
 
 function _getDownloadTestStatus() {
-	return {
+	return Object.entries({
 		dlStatus: dlStatus,
 		dlProgress: dlProgress,
-	}
+	});
 }
 
 function getDownloadTestStatus() {
-	return JSON.stringify(_getDownloadTestStatus())
+	// Convert the arrays of key-value pairs back into objects
+	const downloadTestStatus = Object.fromEntries(_getDownloadTestStatus());
+	const finalResults = {
+		...downloadTestStatus
+	};
+	return JSON.stringify(finalResults);
 }
 
 function _getUploadTestStatus() {
-	return {
+	return Object.entries({
 		ulStatus: ulStatus,
 		ulProgress: ulProgress,
-	}
+	});
 }
 
 function getUploadTestStatus() {
-	return JSON.stringify(_getUploadTestStatus())
+	const uploadTestStatus = Object.fromEntries(_getUploadTestStatus());
+	const finalResults = {
+		...uploadTestStatus
+	};
+	return JSON.stringify(finalResults);
 }
 
 function _getPingTestStatus() {
-	return {
+	return Object.entries({
 		pingStatus: pingStatus,
 		pingProgress: pingProgress,
 		jitterStatus: jitterStatus,
-	}
+	});
 }
 
 function getPingTestStatus() {
-	return JSON.stringify(_getPingTestStatus())
+	const pingTestStatus = Object.fromEntries(_getPingTestStatus());
+	const finalResults = {
+		...pingTestStatus
+	};
+	return JSON.stringify(finalResults);
 }
 
-
 function _getIpTestStatus() {
-	return {
+	return Object.entries({
 		clientIp: clientIp,
-	}
+	});
 }
 
 function getIpTestStatus() {
-	return JSON.stringify(_getIpTestStatus())
+	const ipTestStatus = Object.fromEntries(_getIpTestStatus());
+	const finalResults = {
+		...ipTestStatus
+	};
+	return JSON.stringify(finalResults);
 }
 
 function _getTestInformation() {
-	return {
+	var type = getTestType();
+	var currentRunningTest = getCurrentRunningTest();
+	if (testId == null) {
+		return Object.entries({
+			testId: "",
+			testState: testState,
+			testType: type,
+			currentRunningTest: currentRunningTest,
+		});
+	}
+	return Object.entries({
 		testId: testId,
 		testState: testState,
-		testType: getTestType(),
-		currentRunningTest: getCurrentRunningTest(),
-	}
+		testType: type,
+		currentRunningTest: currentRunningTest,
+	});
 }
 
 function getTestInformation() {
-	return JSON.stringify(_getTestInformation())
+	const testInformation = Object.fromEntries(_getTestInformation());
+	const finalResults = {
+		...testInformation
+	};
+	return JSON.stringify(finalResults);
 }
 
 function getCurrentStatus() {
 	// merge all the functions above
-	return JSON.stringify({
-		..._getTestInformation(),
-		..._getDownloadTestStatus(),
-		..._getUploadTestStatus(),
-		..._getPingTestStatus(),
-		..._getIpTestStatus(),
-	})
+	const testInformation = Object.fromEntries(_getTestInformation());
+	const downloadTestStatus = Object.fromEntries(_getDownloadTestStatus());
+	const uploadTestStatus = Object.fromEntries(_getUploadTestStatus());
+	const pingTestStatus = Object.fromEntries(_getPingTestStatus());
+	const ipTestStatus = Object.fromEntries(_getIpTestStatus());
+	const finalResults = {
+		...testInformation,
+		...downloadTestStatus,
+		...uploadTestStatus,
+		...pingTestStatus,
+		...ipTestStatus,
+	};
+	return JSON.stringify(finalResults);
 }
 
 /*
@@ -205,16 +242,18 @@ this.addEventListener("message", function(e) {
 	if (command === "download") {
 		console.log("download command received");
 	}
-	if (command === "currentStatuses") {
+	if (command === "currentStatus") {
 		return; // do nothing
 	}
 	if (command === "status") {
-		// return status
-		postMessage("currentStatuses " + getCurrentStatus());
+		currentStatus = getCurrentStatus();
+		this.postMessage("currentStatus " + currentStatus);
+		return;
 	}
 
 	if (command === "getSettings") {
 		postMessage("currentSettings " + JSON.stringify(settings));
+		return;
 	}
 
 	if (command === "setSettings" || command === "start" || command === "upload" || command === "download" || command === "ping") {
@@ -298,12 +337,34 @@ this.addEventListener("message", function(e) {
 			twarn("Possible error in custom test settings. Some settings might not have been applied. Exception: " + e);
 		}
 	}
-	var completeADownloadTest = function() {
-		postMessage("downloadTestFinished");
+	var completeADownloadTest = function () {
+		testInfo = _getTestInformation();
+		downloadStatus = _getDownloadTestStatus();
+		
+		// Convert the arrays of key-value pairs back into objects
+		const testInfoObject = Object.fromEntries(testInfo);
+		const downloadStatusObject = Object.fromEntries(downloadStatus);
+		
+		// Merge the two objects into one
+		const finalDownloadTestResults = {
+			...testInfoObject,
+			...downloadStatusObject
+		};
+		
+		// Send the merged object as a JSON string
+		postMessage("finalDownloadTestResults " + JSON.stringify(finalDownloadTestResults));
 		return;
 	}
-	var completeAnUploadTest = function() {
-		postMessage("uploadTestFinished");
+	var completeAnUploadTest = function () {
+		testInfo = _getTestInformation();
+		uploadStatus = _getUploadTestStatus();
+		const testInfoObject = Object.fromEntries(testInfo);
+		const uploadStatusObject = Object.fromEntries(uploadStatus);
+		const finalUploadTestResults = {
+			...testInfoObject,
+			...uploadStatusObject
+		};
+		postMessage("finalUploadTestResults " + JSON.stringify(finalUploadTestResults));
 		return;
 	}
 	var completeAPingTest = function() {
@@ -918,4 +979,67 @@ function sendTelemetry(done) {
 		xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
 		xhr.send(postData);
 	}
+}
+
+function resetWorker() {
+    // Reset test state and statuses
+    testState = -1;
+    dlStatus = "";
+    ulStatus = "";
+    pingStatus = "";
+    jitterStatus = "";
+    clientIp = "";
+    dlProgress = 0;
+    ulProgress = 0;
+    pingProgress = 0;
+    testId = null;
+    testType = null;
+    log = "";
+
+    // Reset settings to default values
+    settings = {
+        mpot: false,
+        test_order: "IP_D_U",
+        time_ul_max: 15,
+        time_dl_max: 15,
+        time_auto: true,
+        time_ulGraceTime: 3,
+        time_dlGraceTime: 1.5,
+        count_ping: 10,
+        url_dl: "backend/garbage.php",
+        url_ul: "backend/empty.php",
+        url_ping: "backend/empty.php",
+        url_getIp: "backend/getIP.php",
+        getIp_ispInfo: true,
+        getIp_ispInfo_distance: "km",
+        xhr_dlMultistream: 6,
+        xhr_ulMultistream: 3,
+        xhr_multistreamDelay: 300,
+        xhr_ignoreErrors: 1,
+        xhr_dlUseBlob: false,
+        xhr_ul_blob_megabytes: 20,
+        garbagePhp_chunkSize: 100,
+        enable_quirks: true,
+        ping_allowPerformanceApi: true,
+        overheadCompensationFactor: 1.06,
+        useMebibits: false,
+        telemetry_level: 0,
+        url_telemetry: "results/telemetry.php",
+        telemetry_extra: "",
+        forceIE11Workaround: false,
+        ipToUse: "169.150.231.170"
+    };
+
+    // Clear any active XHR requests
+    clearRequests();
+
+    // Reset any other necessary state variables
+    xhr = null;
+    interval = null;
+    test_pointer = 0;
+    ipCalled = false;
+    ispInfo = "";
+    dlCalled = false;
+    ulCalled = false;
+    ptCalled = false;
 }

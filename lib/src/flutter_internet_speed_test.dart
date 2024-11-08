@@ -110,6 +110,16 @@ class FlutterInternetSpeedTest {
         if (onDownloadComplete != null) onDownloadComplete(downloadResult);
 
         final startUploadTimeStamp = DateTime.now().millisecondsSinceEpoch;
+        /*
+        onCompleted(
+            downloadResult, TestResult(TestType.upload, 0, SpeedUnit.mbps));
+        FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: false);
+        _isTestInProgress = false;
+        _isCancelled = false;
+        */
+
+        //FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
+
         FlutterInternetSpeedTestPlatform.instance.startUploadTesting(
           onDone: (double transferRate, SpeedUnit unit) {
             final uploadDuration =
@@ -119,7 +129,8 @@ class FlutterInternetSpeedTest {
 
             if (onProgress != null) onProgress(100, uploadResult);
             if (onUploadComplete != null) onUploadComplete(uploadResult);
-
+            FlutterInternetSpeedTestPlatform.instance
+                .resetTest(softReset: false);
             onCompleted(downloadResult, uploadResult);
             _isTestInProgress = false;
             _isCancelled = false;
