@@ -51,6 +51,9 @@ flutter:
       web:
         pluginClass: MethodChannelFlutterInternetSpeedTest
         fileName: src/flutter_internet_speed_test_libre.dart
+    assets:
+      - assets/speedtest.js
+      - assets/speedtest_worker.js
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

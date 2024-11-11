@@ -1,6 +1,7 @@
 // Import necessary libraries
 import 'dart:async';
 import 'dart:convert';
+import 'dart:html';
 import 'dart:js';
 import 'dart:js_interop';
 
@@ -63,10 +64,40 @@ class MethodChannelFlutterInternetSpeedTest
   MethodChannelFlutterInternetSpeedTest({
     ISpeedtest? downloadSpeedTest,
     ISpeedtest? uploadSpeedTest,
-  })  : _downloadSpeedTest =
-            downloadSpeedTest ?? JsSpeedtest(JsObject(context['Speedtest'])),
-        _uploadSpeedTest =
-            uploadSpeedTest ?? JsSpeedtest(JsObject(context['Speedtest']));
+  }) {
+    _loadJavascriptFiles().then((_) {
+      _downloadSpeedTest =
+          downloadSpeedTest ?? _initializeJsSpeedtest('download');
+      _uploadSpeedTest = uploadSpeedTest ?? _initializeJsSpeedtest('upload');
+    }).catchError((error) {
+      throw Exception('Failed to load JavaScript files: $error');
+    });
+  }
+
+  Future<void> _loadJavascriptFiles() async {
+    final completer = Completer<void>();
+    final script = ScriptElement()
+      ..type = 'application/javascript'
+      ..src = 'packages/flutter_internet_speed_test/assets/speedtest.js'
+      ..async = false
+      ..onLoad.listen((_) => completer.complete())
+      ..onError
+          .listen((error) => completer.completeError('Failed to load script'));
+
+    document.head!.append(script);
+    await completer.future;
+  }
+
+  static JsSpeedtest _initializeJsSpeedtest(String type) {
+    final jsObject = context['Speedtest'];
+    if (jsObject == null) {
+      throw Exception('Speedtest JavaScript object is not available.');
+    }
+    return JsSpeedtest(JsObject(jsObject, [
+      'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
+      type
+    ]));
+  }
 
   ISpeedtest? _downloadSpeedTest;
   ISpeedtest? _uploadSpeedTest;
@@ -99,14 +130,19 @@ class MethodChannelFlutterInternetSpeedTest
 
   SpeedTestConfig? _speedTestConfig;
 
-  // Initialize the Speedtest object
   Future<void> _initSpeedtest({required SpeedTestConfig config}) async {
     _speedTestConfig = config;
 
-    _downloadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest']));
+    _downloadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
+      'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
+      'download'
+    ]));
     _initializeSpeedTestInstance(_downloadSpeedTest!);
 
-    _uploadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest']));
+    _uploadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
+      'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
+      'upload'
+    ]));
     _initializeSpeedTestInstance(_uploadSpeedTest!);
 
     await _copyTheTestPointsIfPossible();
