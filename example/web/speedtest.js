@@ -67,12 +67,16 @@
     Example call order: loadServerList, getIp, addTestPoint, selectServer, ping, onupdate, onend
  */
 
-function Speedtest() {
+function Speedtest(type = "") {
   this._serverList = []; //when using multiple points of test, this is a list of test points
   this._selectedServer = null; //when using multiple points of test, this is the selected server
   this._settings = {}; //settings for the speedtest worker
   this._state = 0; //0=adding settings, 1=adding servers, 2=server selection done, 3=test running, 4=done
-  this.worker = new Worker("speedtest_worker.js?r="+ Math.random());
+  if(type !== ""){
+    this.worker = new Worker("speedtest_worker.js?r=" + type);//+ Math.random());
+  }else{
+    this.worker = new Worker("speedtest_worker.js?r=");//+ Math.random());
+  }
 }
 
 const TestType = {
@@ -655,8 +659,6 @@ Speedtest.prototype = {
    */
   reset: function(softReset = true) {
     // Reset internal state
-    
-    
     
     if (!softReset) {
       this._state = 0;

@@ -13,6 +13,7 @@ import 'callbacks_enum.dart';
 import 'flutter_internet_speed_test_platform_interface.dart';
 import 'models/client.dart';
 import 'models/server_selection_response.dart';
+import 'speed_test.dart';
 
 typedef CancelListening = void Function();
 typedef DoneCallback = void Function(double transferRate, SpeedUnit unit);
@@ -25,9 +26,50 @@ typedef ErrorCallback = void Function(
     String errorMessage, String speedTestError);
 typedef CancelCallback = void Function();
 
+class SpeedTestConfig {
+  final String baseUrl;
+  final String urlGetIp;
+  final String urlDl;
+  final String urlUl;
+  final String urlPing;
+  final String urlTelemetry;
+  final String urlServerList;
+  final String telemetryLevel;
+
+  SpeedTestConfig({
+    required this.baseUrl,
+    this.urlGetIp = 'getIP.php',
+    this.urlDl = 'garbage.php',
+    this.urlUl = 'empty.php',
+    this.urlPing = 'empty.php',
+    this.urlTelemetry = 'results/telemetry.php',
+    this.urlServerList = 'servers.json',
+    this.telemetryLevel = '3',
+  });
+
+  // getters combine baseUrl and urlServerList
+  String get serverListUrl => '$baseUrl/$urlServerList';
+
+  String get getIpUrl => '$baseUrl/$urlGetIp';
+  String get dlUrl => '$baseUrl/$urlDl';
+  String get ulUrl => '$baseUrl/$urlUl';
+  String get pingUrl => '$baseUrl/$urlPing';
+  String get telemetryUrl => '$baseUrl/$urlTelemetry';
+  String get getTelemetryLevel => telemetryLevel;
+}
+
 class MethodChannelFlutterInternetSpeedTest
     extends FlutterInternetSpeedTestPlatform {
-  MethodChannelFlutterInternetSpeedTest();
+  MethodChannelFlutterInternetSpeedTest({
+    ISpeedtest? downloadSpeedTest,
+    ISpeedtest? uploadSpeedTest,
+  })  : _downloadSpeedTest =
+            downloadSpeedTest ?? JsSpeedtest(JsObject(context['Speedtest'])),
+        _uploadSpeedTest =
+            uploadSpeedTest ?? JsSpeedtest(JsObject(context['Speedtest']));
+
+  ISpeedtest? _downloadSpeedTest;
+  ISpeedtest? _uploadSpeedTest;
 
   static void registerWith(Registrar registrar) {
     FlutterInternetSpeedTestPlatform.instance =
@@ -47,103 +89,172 @@ class MethodChannelFlutterInternetSpeedTest
   int _testState = -1;
 
   // JavaScript Speedtest object
-  JsObject? _downloadSpeedTest;
-  JsObject? _uploadSpeedTest;
+  // JsObject? _downloadSpeedTest;
+  // JsObject? _uploadSpeedTest;
   // Current test ID
   int _currentTestId = 0;
 
   // client object
   Client? _client;
 
-  // Initialize the Speedtest object
-  void _initSpeedtest() async {
-    if (_downloadSpeedTest == null) {
-      _downloadSpeedTest = JsObject(context['Speedtest']);
-      //TODO: make this a config
-      _downloadSpeedTest!.callMethod('setParameter', ['telemetry_level', '3']);
-      _downloadSpeedTest!.callMethod(
-          'setParameter', ['url_getIp', 'http://localhost:8080/getIP.php']);
-      _downloadSpeedTest!.callMethod(
-          'setParameter', ['url_dl', 'http://localhost:8080/garbage.php']);
-      _downloadSpeedTest!.callMethod(
-          'setParameter', ['url_ul', 'http://localhost:8080/empty.php']);
-      _downloadSpeedTest!.callMethod(
-          'setParameter', ['url_ping', 'http://localhost:8080/empty.php']);
-      _downloadSpeedTest!.callMethod('setParameter',
-          ['url_telemetry', 'http://localhost:8080/results/telemetry.php']);
-    } else {
-      // TODO: try not to reset since updload and download are independent
-      //_downloadSpeedTest!.callMethod('reset');
-    }
+  SpeedTestConfig? _speedTestConfig;
 
-    if (_uploadSpeedTest == null) {
-      _uploadSpeedTest = JsObject(context['Speedtest']);
-      //TODO: make this a config
-      _uploadSpeedTest!.callMethod('setParameter', ['telemetry_level', '3']);
-      _uploadSpeedTest!.callMethod(
-          'setParameter', ['url_getIp', 'http://localhost:8080/getIP.php']);
-      _uploadSpeedTest!.callMethod(
-          'setParameter', ['url_dl', 'http://localhost:8080/garbage.php']);
-      _uploadSpeedTest!.callMethod(
-          'setParameter', ['url_ul', 'http://localhost:8080/empty.php']);
-      _uploadSpeedTest!.callMethod(
-          'setParameter', ['url_ping', 'http://localhost:8080/empty.php']);
-      _uploadSpeedTest!.callMethod('setParameter',
-          ['url_telemetry', 'http://localhost:8080/results/telemetry.php']);
-    }
-    if (_downloadSpeedTest!.callMethod('getState') >= 2 &&
-        _uploadSpeedTest!.callMethod('getState') < 2) {
-      final testPoints = _downloadSpeedTest!.callMethod('getTestPoints');
-      final selectedServer =
-          _downloadSpeedTest!.callMethod('getSelectedServer');
-      _uploadSpeedTest!.callMethod('addTestPoints', [testPoints]);
-      _uploadSpeedTest!.callMethod('setSelectedServer', [selectedServer]);
-    }
+  // Initialize the Speedtest object
+  Future<void> _initSpeedtest({required SpeedTestConfig config}) async {
+    _speedTestConfig = config;
+
+    _downloadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest']));
+    _initializeSpeedTestInstance(_downloadSpeedTest!);
+
+    _uploadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest']));
+    _initializeSpeedTestInstance(_uploadSpeedTest!);
+
+    await _copyTheTestPointsIfPossible();
   }
 
-  var downloadCompleter = Completer<void>();
-  var uploadCompleter = Completer<void>();
+  Future<void> _copyTheTestPointsIfPossible() async {
+    Completer<void> completer = Completer();
+
+    if (_downloadSpeedTest!.getState() >= 2 &&
+        _uploadSpeedTest!.getState() < 2) {
+      final testPoints = _downloadSpeedTest!.getTestPoints();
+      final selectedServer = _downloadSpeedTest!.getSelectedServer();
+
+      _uploadSpeedTest!.addTestPoints(testPoints);
+
+      // Assuming setSelectedServer is synchronous, complete the completer immediately
+      _uploadSpeedTest!.setSelectedServer(selectedServer);
+      completer.complete();
+    } else {
+      // If the conditions are not met, complete the completer immediately
+      completer.complete();
+    }
+
+    return completer.future;
+  }
+
+  void _initializeSpeedTestInstance(ISpeedtest speedTestInstance) {
+    speedTestInstance.setParameter(
+        'telemetry_level', _speedTestConfig!.telemetryLevel);
+    speedTestInstance.setParameter('url_getIp', _speedTestConfig!.getIpUrl);
+    speedTestInstance.setParameter('url_dl', _speedTestConfig!.dlUrl);
+    speedTestInstance.setParameter('url_ul', _speedTestConfig!.ulUrl);
+    speedTestInstance.setParameter('url_ping', _speedTestConfig!.pingUrl);
+    speedTestInstance.setParameter(
+        'url_telemetry', _speedTestConfig!.telemetryUrl);
+  }
+
+  var _downloadCompleter = Completer<void>();
+  var _uploadCompleter = Completer<void>();
+
   Future<void> _getIpAndStartDownloadTest() async {
     if (_client == null) {
-      _downloadSpeedTest!.callMethod('getIp', [
-        allowInterop((JSString ispInfo) {
-          //print('IP data received1: $ipData');
-          // access the getIp javascript function on the window object
-          //print('IP data received2');
-          print(json
-              .decode(ispInfo.toDart)); //TODO: need to convert to a dart type
+      _downloadSpeedTest!.getIp((JSString ispInfo) {
+        final decodedIspInfo = json.decode(ispInfo.toDart);
+        // check if this is a valid type
+        if (decodedIspInfo is Map<String, dynamic>) {
+          _client = Client.fromNewModel(decodedIspInfo);
+        } else {
+          throw Exception(
+              'Invalid ispInfo type. likely the server url for getIP is wrong' +
+                  (_speedTestConfig?.getIpUrl ?? ""));
+        }
 
-          _client = Client.fromNewModel(json.decode(ispInfo.toDart));
-
-          _downloadSpeedTest!.callMethod('startDownloadTest');
-        })
-      ]);
+        _downloadSpeedTest!.startDownloadTest();
+      });
     } else {
-      _downloadSpeedTest!.callMethod('startDownloadTest');
+      _downloadSpeedTest!.startDownloadTest();
     }
-    return downloadCompleter.future;
+    return _downloadCompleter.future;
   }
 
   Future<void> _getIpAndStartUploadTest() async {
+    await _copyTheTestPointsIfPossible();
     if (_client == null) {
-      _uploadSpeedTest!.callMethod('getIp', [
-        allowInterop((JSString ispInfo) {
-          //print('IP data received1: $ipData');
-          // access the getIp javascript function on the window object
-          //print('IP data received2');
-          print(json
-              .decode(ispInfo.toDart)); //TODO: need to convert to a dart type
+      _uploadSpeedTest!.getIp((JSString ispInfo) {
+        final decodedIspInfo = json.decode(ispInfo.toDart);
+        // check if this is a valid type
+        if (decodedIspInfo is Map<String, dynamic>) {
+          _client = Client.fromNewModel(decodedIspInfo);
+        } else {
+          throw Exception(
+              'Invalid ispInfo type. likely the server url for getIP is wrong' +
+                  (_speedTestConfig?.getIpUrl ?? ""));
+        }
 
-          _client = Client.fromNewModel(json.decode(ispInfo.toDart));
-
-          _uploadSpeedTest!.callMethod('startUploadTest');
-        })
-      ]);
+        _uploadSpeedTest!.startUploadTest();
+      });
     } else {
-      _uploadSpeedTest!.callMethod('startUploadTest');
+      _uploadSpeedTest!.startUploadTest();
     }
 
-    return uploadCompleter.future;
+    return _uploadCompleter.future;
+  }
+
+  Future<void> ensureDownloadServerIsSelected(String testServer) async {
+    if (_speedTestConfig == null || _speedTestConfig!.baseUrl != testServer) {
+      // Initialize speed test with the new server
+      await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
+
+      // Create a completer to wait for the server selection process to complete
+      Completer<void> serverSelectionCompleter = Completer();
+
+      // Load server list and select the server
+      await loadDownloadServerList(_speedTestConfig!.serverListUrl, (servers) {
+        if (servers != null) {
+          var mappedServers = jsObjectToMap(servers);
+          print(mappedServers);
+
+          selectDownloadServer((bestServer) {
+            if (bestServer != null) {
+              setSelectedDownloadServer(bestServer);
+
+              serverSelectionCompleter.complete(); // Complete the completer
+            } else {
+              serverSelectionCompleter.completeError('No server selected');
+            }
+          });
+        } else {
+          serverSelectionCompleter.completeError('No servers found');
+        }
+      });
+
+      // Wait for the server selection process to complete
+      await serverSelectionCompleter.future;
+    }
+  }
+
+  Future<void> ensureUploadServerIsSelected(String testServer) async {
+    if (_speedTestConfig == null || _speedTestConfig!.baseUrl != testServer) {
+      // Initialize speed test with the new server
+      await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
+
+      // Create a completer to wait for the server selection process to complete
+      Completer<void> serverSelectionCompleter = Completer();
+
+      // Load server list and select the server
+      await loadUploadServerList(_speedTestConfig!.serverListUrl, (servers) {
+        if (servers != null) {
+          var mappedServers = jsObjectToMap(servers);
+          print(mappedServers);
+
+          selectUploadServer((bestServer) {
+            if (bestServer != null) {
+              setSelectedUploadServer(bestServer);
+
+              serverSelectionCompleter.complete(); // Complete the completer
+            } else {
+              serverSelectionCompleter.completeError('No server selected');
+            }
+          });
+        } else {
+          serverSelectionCompleter.completeError('No servers found');
+        }
+      });
+
+      // Wait for the server selection process to complete
+      await serverSelectionCompleter.future;
+    }
   }
 
   @override
@@ -155,34 +266,17 @@ class MethodChannelFlutterInternetSpeedTest
     required int fileSize,
     required String testServer,
   }) async {
-    _initSpeedtest();
-    _currentTestId++;
+    await ensureDownloadServerIsSelected(testServer);
 
-    // Store callbacks
+    _currentTestId++;
     callbacksById[_currentTestId] =
         Tuple4(onError, onProgress, onDone, onCancel);
 
-    // Set up settings
-    //TODO: remove this
-    final settings = {
-      'url_dl': '${testServer}garbage.php',
-      'url_getIp': '${testServer}getIP.php',
-      //time_dl_max': fileSize / 1000000, // Adjust time based on file size
-      'telemetry_level': 3,
-    };
-
-    // Loop through settings and set each parameter
-    settings.forEach((key, value) {
-      _downloadSpeedTest!.callMethod('setParameter', [key, value]);
-    });
-
-    // Set up event handlers
     if (_downloadSpeedTest != null) {
-      _downloadSpeedTest!['onupdate'] = allowInterop(_onUpdate);
-      _downloadSpeedTest!['onend'] = allowInterop(_onEndDownload);
+      _downloadSpeedTest!.onUpdate(_onUpdate);
+      _downloadSpeedTest!.onEnd(_onEndDownload);
     }
 
-    // Wait for IP fetch before starting test
     await _getIpAndStartDownloadTest();
 
     return () {
@@ -199,35 +293,18 @@ class MethodChannelFlutterInternetSpeedTest
     required int fileSize,
     required String testServer,
   }) async {
-    _initSpeedtest();
-    _currentTestId++;
+    await ensureUploadServerIsSelected(testServer);
 
-    // Store callbacks
+    _currentTestId++;
     callbacksById[_currentTestId] =
         Tuple4(onError, onProgress, onDone, onCancel);
 
-    // Set up settings
-    final settings = {
-      'url_ul': '$testServer/empty.php',
-      'time_ul_max': fileSize / 1000000, // Adjust time based on file size
-      'getIp_ispInfo': true,
-      'getIp_ispInfo_distance': 10,
-      'telemetry_level': 3,
-    };
-
-    // Loop through settings and set each parameter
-    settings.forEach((key, value) {
-      _uploadSpeedTest!.callMethod('setParameter', [key, value]);
-    });
-
-    // Set up event handlers
     if (_uploadSpeedTest != null) {
-      _uploadSpeedTest!['onupdate'] = allowInterop(_onUpdate);
-      _uploadSpeedTest!['onend'] = allowInterop(_onEndUpload);
+      _uploadSpeedTest!.onUpdate(_onUpdate);
+      _uploadSpeedTest!.onEnd(_onEndUpload);
     }
 
-    // Start the test
-    _uploadSpeedTest!.callMethod('startUploadTest');
+    await _getIpAndStartUploadTest();
 
     return () {
       cancelTest();
@@ -242,7 +319,7 @@ class MethodChannelFlutterInternetSpeedTest
     required CancelCallback onCancel,
     required String testServer,
   }) async {
-    _initSpeedtest();
+    await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
     _currentTestId++;
 
     // Store callbacks
@@ -263,8 +340,8 @@ class MethodChannelFlutterInternetSpeedTest
 
     // Set up event handlers
     if (_downloadSpeedTest != null) {
-      _downloadSpeedTest!['onupdate'] = allowInterop(_onUpdate);
-      _downloadSpeedTest!['onend'] = allowInterop(_onEndPing);
+      _downloadSpeedTest!.onUpdate(_onUpdate);
+      _downloadSpeedTest!.onEnd(_onEndPing);
     }
 
     // Wait for IP fetch before starting test
@@ -307,64 +384,92 @@ class MethodChannelFlutterInternetSpeedTest
     return result;
   }
 
-  @override
-  Future<ServerSelectionResponse?> getDefaultServer({
-    String? serverListUrl, // Accept serverListUrl
-    Map<String, dynamic>? additionalConfigs, // Accept additional configurations
-  }) async {
-    _initSpeedtest();
-
-    Completer<ServerSelectionResponse?> completer = Completer();
-
-    // Load server list (assuming you have a server list URL)
-    //TODO: load this from a config
-    serverListUrl ??= 'http://localhost:8080/servers.json';
-
+  Future<void> loadDownloadServerList(
+      String serverListUrl, Function callback) async {
     _downloadSpeedTest!.callMethod('loadServerList', [
       serverListUrl,
-      allowInterop((servers) {
+      allowInterop(callback),
+    ]);
+  }
+
+  Future<void> loadUploadServerList(
+      String serverListUrl, Function callback) async {
+    _uploadSpeedTest!.callMethod('loadServerList', [
+      serverListUrl,
+      allowInterop(callback),
+    ]);
+  }
+
+  Future<void> selectDownloadServer(Function callback) async {
+    _downloadSpeedTest!.callMethod('selectServer', [
+      allowInterop(callback),
+    ]);
+  }
+
+  Future<void> selectUploadServer(Function callback) async {
+    _uploadSpeedTest!.callMethod('selectServer', [
+      allowInterop(callback),
+    ]);
+  }
+
+  void setSelectedDownloadServer(dynamic server) {
+    _downloadSpeedTest!.callMethod('setSelectedServer', [server]);
+  }
+
+  void setSelectedUploadServer(dynamic server) {
+    _uploadSpeedTest!.callMethod('setSelectedServer', [server]);
+  }
+
+  @override
+  Future<ServerSelectionResponse?> getDefaultServer({
+    String? serverListUrl,
+    Map<String, dynamic>? additionalConfigs,
+  }) async {
+    Completer<ServerSelectionResponse?> completer = Completer();
+
+    serverListUrl ??= 'http://localhost:8080';
+
+    await _initSpeedtest(
+        config: SpeedTestConfig(
+            baseUrl: serverListUrl, urlServerList: "servers.json"));
+
+    if (serverListUrl.isNotEmpty) {
+      await loadDownloadServerList(serverListUrl, (servers) {
         if (servers != null) {
           var mappedServers = jsObjectToMap(servers);
           print(mappedServers);
-          // Select the best server
-          _downloadSpeedTest!.callMethod('selectServer', [
-            allowInterop((bestServer) {
-              if (bestServer != null) {
-                var dartedBestServer = jsObjectToMap(bestServer);
-                // Server selected
-                _downloadSpeedTest!
-                    .callMethod('setSelectedServer', [bestServer]);
 
-                //client is not available yet because we haven't ran the getIp function
+          selectDownloadServer((bestServer) {
+            if (bestServer != null) {
+              var dartedBestServer = jsObjectToMap(bestServer);
+              setSelectedDownloadServer(bestServer);
 
-                // If mappedServers is a single server object
-                List<Targets> targets = [
-                  Targets(
-                    name: dartedBestServer['name'] as String?,
-                    url: dartedBestServer['server'] as String?,
-                    // TODO: consider location and see how its used in mobile
-                  )
-                ];
+              List<Targets> targets = [
+                Targets(
+                  name: dartedBestServer['name'] as String?,
+                  url: dartedBestServer['server'] as String?,
+                )
+              ];
 
-                ServerSelectionResponse response = ServerSelectionResponse(
-                  client: _client,
-                  targets: targets,
-                );
-                completer.complete(response);
-              } else {
-                completer.complete(null);
-              }
-            })
-          ]);
+              ServerSelectionResponse response = ServerSelectionResponse(
+                client: _client,
+                targets: targets,
+              );
+              completer.complete(response);
+            } else {
+              completer.complete(null);
+            }
+          });
         } else {
           completer.complete(null);
         }
-      })
-    ]);
+      });
+    } else {
+      completer.complete(null);
+    }
 
-    // Apply additional configurations if provided
     additionalConfigs?.forEach((key, value) {
-      _downloadSpeedTest!.callMethod('setParameter', [key, value]);
+      _downloadSpeedTest!.setParameter(key, value);
     });
 
     return completer.future;
@@ -376,7 +481,10 @@ class MethodChannelFlutterInternetSpeedTest
       _downloadSpeedTest!.callMethod('abort');
       return true;
     }
-    return false;
+    if (_uploadSpeedTest != null) {
+      _uploadSpeedTest!.callMethod('abort');
+    }
+    return true;
   }
 
   @override
@@ -389,7 +497,7 @@ class MethodChannelFlutterInternetSpeedTest
   void _onUpdate(dynamic data) {
     // Convert JavaScript object to Dart Map
     Map<String, dynamic> result = Map<String, dynamic>.from(jsToNative(data));
-    print(result.toString());
+
     // Extract values
     _dlStatus = double.tryParse(result['dlStatus'].toString()) ?? 0.0;
     _ulStatus = double.tryParse(result['ulStatus'].toString()) ?? 0.0;
@@ -398,32 +506,17 @@ class MethodChannelFlutterInternetSpeedTest
     final _testType = result['testType']?.toString() ?? "";
 
     // Callbacks
-    switch (_testType) {
-      case 'download':
-        // Handle download test logic
-        var callbackTuple = callbacksById[_currentTestId];
-        if (callbackTuple != null) {
+    var callbackTuple = callbacksById[_currentTestId];
+    if (callbackTuple != null) {
+      switch (_testType) {
+        case 'download':
           callbackTuple.item2(_dlProgress * 100, _dlStatus, SpeedUnit.mbps);
-        }
-        break;
-      case 'upload':
-        // Handle upload test logic
-        var callbackTuple = callbacksById[_currentTestId];
-        if (callbackTuple != null) {
+          break;
+        case 'upload':
           callbackTuple.item2(_ulProgress * 100, _ulStatus, SpeedUnit.mbps);
-        }
-        break;
-      case 'ping':
-        // Handle ping test logic
-        // Add your ping handling code here
-        break;
-      case 'ip':
-        // Handle IP test logic
-        // Add your IP handling code here
-        break;
-      default:
-        // Handle unknown test type
-        break;
+          break;
+        // Handle other test types if needed
+      }
     }
   }
 
@@ -440,7 +533,7 @@ class MethodChannelFlutterInternetSpeedTest
             SpeedUnit.mbps); // Replace 0.0 with actual rate
       }
       //todo: THIS DOESN'T HANDLE THE UPLOAD CASE
-      downloadCompleter.complete();
+      _downloadCompleter.complete();
     }
   }
 
@@ -456,7 +549,7 @@ class MethodChannelFlutterInternetSpeedTest
             SpeedUnit.mbps); // Replace 0.0 with actual rate
       }
       //todo: THIS DOESN'T HANDLE THE UPLOAD CASE
-      uploadCompleter.complete();
+      _uploadCompleter.complete();
     }
   }
 
@@ -478,8 +571,8 @@ class MethodChannelFlutterInternetSpeedTest
 
   @override
   Future<void> resetTest({bool softReset = false}) async {
-    downloadCompleter = Completer<void>();
-    uploadCompleter = Completer<void>();
+    _downloadCompleter = Completer<void>();
+    _uploadCompleter = Completer<void>();
     _downloadSpeedTest!.callMethod('reset', [softReset]);
     _uploadSpeedTest!.callMethod('reset', [softReset]);
   }
