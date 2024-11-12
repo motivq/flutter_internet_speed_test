@@ -227,13 +227,15 @@ class _MyAppState extends State<MyApp> {
         _uploadRate = 0;
         _downloadProgress = '0';
         _uploadProgress = '0';
-        _unitText = 'Mbps';
         _downloadCompletionTime = 0;
         _uploadCompletionTime = 0;
+        _isServerSelectionInProgress = false;
 
         _ip = null;
         _asn = null;
         _isp = null;
+
+        _unitText = 'Mbps';
       }
     });
   }

@@ -68,6 +68,8 @@ class FlutterInternetSpeedTest {
 
     if (onStarted != null) onStarted();
 
+    FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
+
     if ((downloadTestServer == null || uploadTestServer == null) &&
         useFastApi) {
       if (onDefaultServerSelectionInProgress != null) {
@@ -143,7 +145,7 @@ class FlutterInternetSpeedTest {
       }
     }
 
-    final startDownloadTimeStamp = DateTime.now().millisecondsSinceEpoch;
+    var startDownloadTimeStamp = DateTime.now().millisecondsSinceEpoch;
     FlutterInternetSpeedTestPlatform.instance.startDownloadTesting(
       onDone: (double transferRate, SpeedUnit unit,
           {double? jitter, double? ping}) async {
@@ -156,15 +158,7 @@ class FlutterInternetSpeedTest {
         if (onDownloadComplete != null) onDownloadComplete(downloadResult);
 
         final startUploadTimeStamp = DateTime.now().millisecondsSinceEpoch;
-        /*
-        onCompleted(
-            downloadResult, TestResult(TestType.upload, 0, SpeedUnit.mbps));
-        FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: false);
-        _isTestInProgress = false;
-        _isCancelled = false;
-        */
 
-        //FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
         if (onGetIPDone != null) {
           Client? client = await FlutterInternetSpeedTestPlatform.instance
               .getClientInformation();

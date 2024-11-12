@@ -129,21 +129,29 @@ class MethodChannelFlutterInternetSpeedTest
   SpeedTestConfig? _speedTestConfig;
 
   Future<void> _initSpeedtest({required SpeedTestConfig config}) async {
+    bool configChanged =
+        _speedTestConfig == null || _speedTestConfig!.baseUrl != config.baseUrl;
+
     _speedTestConfig = config;
 
-    _downloadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
-      'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
-      'download'
-    ]));
-    _initializeSpeedTestInstance(_downloadSpeedTest!);
+    if (configChanged) {
+      _downloadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
+        'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
+        'download'
+      ]));
+      _initializeSpeedTestInstance(_downloadSpeedTest!);
 
-    _uploadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
-      'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
-      'upload'
-    ]));
-    _initializeSpeedTestInstance(_uploadSpeedTest!);
+      _uploadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
+        'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
+        'upload'
+      ]));
+      _initializeSpeedTestInstance(_uploadSpeedTest!);
 
-    await _copyTheTestPointsIfPossible();
+      await ensureDownloadServerIsSelected(config.baseUrl);
+      await ensureUploadServerIsSelected(config.baseUrl);
+    } else {
+      await _copyTheTestPointsIfPossible();
+    }
   }
 
   Future<void> _copyTheTestPointsIfPossible() async {
@@ -180,22 +188,21 @@ class MethodChannelFlutterInternetSpeedTest
 
   var _downloadCompleter = Completer<void>();
   var _uploadCompleter = Completer<void>();
+  var _clientCompleter = Completer<Client>();
 
   Future<Client> _fetchClientFromIp(ISpeedtest speedTest) async {
-    final completer = Completer<Client>();
-
     speedTest.getIp((JSString ispInfo) {
       final decodedIspInfo = json.decode(ispInfo.toDart);
       if (decodedIspInfo is Map<String, dynamic>) {
         final client = Client.fromNewModel(decodedIspInfo);
-        completer.complete(client);
+        _clientCompleter.complete(client);
       } else {
-        completer.completeError(Exception(
+        _clientCompleter.completeError(Exception(
             'Invalid ispInfo type. likely the server url for getIP is wrong${_speedTestConfig?.getIpUrl ?? ""}'));
       }
     });
 
-    return completer.future;
+    return _clientCompleter.future;
   }
 
   Future<void> _getIpAndStartDownloadTest() async {
@@ -270,8 +277,8 @@ class MethodChannelFlutterInternetSpeedTest
       // Load server list and select the server
       await loadUploadServerList(_speedTestConfig!.serverListUrl, (servers) {
         if (servers != null) {
-          var mappedServers = jsObjectToMap(servers);
-          print(mappedServers);
+          //var mappedServers = jsObjectToMap(servers);
+          //print(mappedServers);
 
           selectUploadServer((bestServer) {
             if (bestServer != null) {
@@ -622,6 +629,14 @@ class MethodChannelFlutterInternetSpeedTest
   Future<void> resetTest({bool softReset = false}) async {
     _downloadCompleter = Completer<void>();
     _uploadCompleter = Completer<void>();
+    _clientCompleter = Completer<Client>();
+    _dlStatus = 0.0;
+    _ulStatus = 0.0;
+    _dlProgress = 0.0;
+    _ulProgress = 0.0;
+    _pingStatus = 0.0;
+    _pingProgress = 0.0;
+    _jitterStatus = 0.0;
     if (!softReset) {
       _speedTestConfig = null;
     }

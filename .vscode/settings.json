@@ -1,5 +1,12 @@
 {
-  "cSpell.words": ["arraybuffer", "instspd", "Mbps", "Millis", "Speedtest"],
+  "cSpell.words": [
+    "arraybuffer",
+    "instspd",
+    "Kbps",
+    "Mbps",
+    "Millis",
+    "Speedtest"
+  ],
   "editor.formatOnPaste": true,
   "diffEditor.codeLens": true,
   "editor.formatOnType": true,
