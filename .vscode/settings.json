@@ -1,0 +1,20 @@
+{
+  "cSpell.words": [
+    "arraybuffer",
+    "instspd",
+    "Kbps",
+    "Mbps",
+    "Millis",
+    "Speedtest"
+  ],
+  "editor.formatOnPaste": true,
+  "diffEditor.codeLens": true,
+  "editor.formatOnType": true,
+  "files.insertFinalNewline": true,
+  // Set the default
+  "editor.formatOnSave": true,
+  // Enable per-language
+  "[javascript]": {
+    "editor.formatOnSave": true
+  }
+}

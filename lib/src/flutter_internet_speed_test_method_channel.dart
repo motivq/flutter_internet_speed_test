@@ -1,20 +1,26 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_internet_speed_test/src/models/server_selection_response.dart';
-import 'package:flutter_internet_speed_test/src/speed_test_utils.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:tuple_dart/tuple.dart';
 
+import 'package:flutter_internet_speed_test/src/models/server_selection_response.dart';
+import 'package:flutter_internet_speed_test/src/speed_test_utils.dart';
+
 import 'callbacks_enum.dart';
 import 'flutter_internet_speed_test_platform_interface.dart';
+import 'models/client.dart';
 
+//TODO: need to implement the start ping testing
 /// An implementation of [FlutterInternetSpeedTestPlatform] that uses method channels.
 class MethodChannelFlutterInternetSpeedTest
     extends FlutterInternetSpeedTestPlatform {
   /// The method channel used to interact with the native platform.
-  final _channel = const MethodChannel('com.shaz.plugin.fist/method');
+  @visibleForTesting
+  final methodChannel = const MethodChannel('com.shaz.plugin.fist/method');
   final _logger = Logger();
 
   Future<void> _methodCallHandler(MethodCall call) async {
@@ -136,7 +142,7 @@ class MethodChannelFlutterInternetSpeedTest
         }
     }
 
-    _channel.invokeMethod("cancelListening", call.arguments["id"]);
+    methodChannel.invokeMethod("cancelListening", call.arguments["id"]);
   }
 
   Future<CancelListening> _startListening(
@@ -146,13 +152,13 @@ class MethodChannelFlutterInternetSpeedTest
       String testServer,
       {Map<String, dynamic>? args,
       int fileSize = 10000000}) async {
-    _channel.setMethodCallHandler(_methodCallHandler);
+    methodChannel.setMethodCallHandler(_methodCallHandler);
     int currentListenerId = callbacksEnum.index;
     if (isLogEnabled) {
       _logger.d('test $currentListenerId');
     }
     callbacksById[currentListenerId] = callback;
-    await _channel.invokeMethod(
+    await methodChannel.invokeMethod(
       "startListening",
       {
         'id': currentListenerId,
@@ -162,13 +168,13 @@ class MethodChannelFlutterInternetSpeedTest
       },
     );
     return () {
-      _channel.invokeMethod("cancelListening", currentListenerId);
+      methodChannel.invokeMethod("cancelListening", currentListenerId);
       callbacksById.remove(currentListenerId);
     };
   }
 
   Future<void> _toggleLog(bool value) async {
-    await _channel.invokeMethod(
+    await methodChannel.invokeMethod(
       "toggleLog",
       {
         'value': value,
@@ -209,23 +215,43 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   @override
-  Future<ServerSelectionResponse?> getDefaultServer() async {
+  Future<ServerSelectionResponse?> getDefaultServer({
+    String? serverListUrl,
+    Map<String, dynamic>? additionalConfigs,
+  }) async {
     try {
       if (await isInternetAvailable()) {
-        const tag = 'token:"';
-        var tokenUrl = Uri.parse('https://fast.com/app-a32983.js');
-        var tokenResponse = await http.get(tokenUrl);
-        if (tokenResponse.body.contains(tag)) {
-          int start = tokenResponse.body.lastIndexOf(tag) + tag.length;
-          String token = tokenResponse.body.substring(start, start + 32);
-          var serverUrl = Uri.parse(
-              'https://api.fast.com/netflix/speedtest/v2?https=true&token=$token&urlCount=5');
-          var serverResponse = await http.get(serverUrl);
-          var serverSelectionResponse = ServerSelectionResponse.fromJson(
-              json.decode(serverResponse.body));
-          if (serverSelectionResponse.targets?.isNotEmpty == true) {
-            return serverSelectionResponse;
+        Uri serverUrl;
+        if (serverListUrl == null) {
+          const tag = 'token:"';
+          var tokenUrl = Uri.parse('https://fast.com/app-a32983.js');
+          var tokenResponse = await http.get(tokenUrl);
+          if (tokenResponse.body.contains(tag)) {
+            int start = tokenResponse.body.lastIndexOf(tag) + tag.length;
+            String token = tokenResponse.body.substring(start, start + 32);
+            serverUrl = Uri.parse(
+                'https://api.fast.com/netflix/speedtest/v2?https=true&token=$token&urlCount=5');
+          } else {
+            return null; //TODO: what? // Return null if token is not found
           }
+        } else {
+          serverUrl = Uri.parse(serverListUrl);
+        }
+
+        var serverResponse = await http.get(serverUrl);
+        var serverSelectionResponse =
+            ServerSelectionResponse.fromJson(json.decode(serverResponse.body));
+
+        // Apply additional configurations if provided
+        if (additionalConfigs != null) {
+          additionalConfigs.forEach((key, value) {
+            _logger.d('Config $key: $value');
+            // Implement any specific logic needed for additionalConfigs
+          });
+        }
+
+        if (serverSelectionResponse.targets?.isNotEmpty == true) {
+          return serverSelectionResponse;
         }
       }
     } catch (e) {
@@ -240,7 +266,7 @@ class MethodChannelFlutterInternetSpeedTest
   Future<bool> cancelTest() async {
     var result = false;
     try {
-      result = await _channel.invokeMethod("cancelTest", {
+      result = await methodChannel.invokeMethod("cancelTest", {
         'id1': CallbacksEnum.startDownLoadTesting.index,
         'id2': CallbacksEnum.startUploadTesting.index,
       });
@@ -248,5 +274,22 @@ class MethodChannelFlutterInternetSpeedTest
       result = false;
     }
     return result;
+  }
+
+  @override
+  Future<String?> getPlatformVersion() async {
+    final version =
+        await methodChannel.invokeMethod<String>('getPlatformVersion');
+    return version;
+  }
+
+  @override
+  Future<void> resetTest({bool softReset = false}) async {
+    return; //Nothing to do here
+  }
+
+  @override
+  Future<Client?> getClientInformation() async {
+    return null;
   }
 }

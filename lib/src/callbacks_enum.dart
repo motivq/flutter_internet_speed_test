@@ -1,6 +1,7 @@
 enum TestType {
   download,
   upload,
+  ping,
 }
 
 enum CallbacksEnum {
@@ -18,4 +19,5 @@ enum ListenerEnum {
 enum SpeedUnit {
   kbps,
   mbps,
+  ms,
 }

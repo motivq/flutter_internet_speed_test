@@ -1,18 +1,22 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_internet_speed_test/src/models/server_selection_response.dart';
+
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:tuple_dart/tuple.dart';
 
+import 'package:flutter_internet_speed_test/src/models/server_selection_response.dart';
+
 import 'callbacks_enum.dart';
-import 'flutter_internet_speed_test_method_channel.dart';
+import 'flutter_internet_speed_test_stub.dart'
+    if (dart.library.html) 'flutter_internet_speed_test_libre.dart'
+    if (dart.library.io) 'flutter_internet_speed_test_method_channel.dart';
+import 'models/client.dart';
 
 typedef CancelListening = void Function();
-typedef DoneCallback = void Function(double transferRate, SpeedUnit unit);
+typedef DoneCallback = void Function(double transferRate, SpeedUnit unit,
+    {double? jitter, double? ping});
 typedef ProgressCallback = void Function(
-  double percent,
-  double transferRate,
-  SpeedUnit unit,
-);
+    double percent, double transferRate, SpeedUnit unit,
+    {double? jitter, double? ping});
 typedef ErrorCallback = void Function(
     String errorMessage, String speedTestError);
 typedef CancelCallback = void Function();
@@ -73,17 +77,44 @@ abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
     throw UnimplementedError('startUploadTesting() has not been implemented.');
   }
 
+  Future<CancelListening> startPingTesting({
+    required DoneCallback onDone,
+    required ProgressCallback onProgress,
+    required ErrorCallback onError,
+    required CancelCallback onCancel,
+    required String testServer,
+  }) {
+    throw UnimplementedError('startPingTest() has not been implemented.');
+  }
+
   Future<void> toggleLog({
     required bool value,
   }) {
     throw UnimplementedError('toggleLog() has not been implemented.');
   }
 
-  Future<ServerSelectionResponse?> getDefaultServer() {
+  Future<ServerSelectionResponse?> getDefaultServer({
+    String? serverListUrl,
+    Map<String, dynamic>? additionalConfigs,
+  }) {
     throw UnimplementedError('getDefaultServer() has not been implemented.');
   }
 
   Future<bool> cancelTest() {
     throw UnimplementedError('cancelTest() has not been implemented.');
+  }
+
+  Future<void> resetTest({bool softReset = false}) {
+    throw UnimplementedError('resetTest() has not been implemented.');
+  }
+
+  Future<String?> getPlatformVersion() {
+    throw UnimplementedError('getPlatformVersion() has not been implemented.');
+  }
+
+  /// Method to get client information.
+  Future<Client?> getClientInformation() {
+    throw UnimplementedError(
+        'getClientInformation() has not been implemented.');
   }
 }
