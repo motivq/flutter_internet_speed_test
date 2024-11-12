@@ -12,7 +12,9 @@ import 'package:flutter_internet_speed_test/src/speed_test_utils.dart';
 
 import 'callbacks_enum.dart';
 import 'flutter_internet_speed_test_platform_interface.dart';
+import 'models/client.dart';
 
+//TODO: need to implement the start ping testing
 /// An implementation of [FlutterInternetSpeedTestPlatform] that uses method channels.
 class MethodChannelFlutterInternetSpeedTest
     extends FlutterInternetSpeedTestPlatform {
@@ -284,5 +286,10 @@ class MethodChannelFlutterInternetSpeedTest
   @override
   Future<void> resetTest({bool softReset = false}) async {
     return; //Nothing to do here
+  }
+
+  @override
+  Future<Client?> getClientInformation() async {
+    return null;
   }
 }

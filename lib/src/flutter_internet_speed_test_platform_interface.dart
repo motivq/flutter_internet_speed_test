@@ -9,14 +9,14 @@ import 'callbacks_enum.dart';
 import 'flutter_internet_speed_test_stub.dart'
     if (dart.library.html) 'flutter_internet_speed_test_libre.dart'
     if (dart.library.io) 'flutter_internet_speed_test_method_channel.dart';
+import 'models/client.dart';
 
 typedef CancelListening = void Function();
-typedef DoneCallback = void Function(double transferRate, SpeedUnit unit);
+typedef DoneCallback = void Function(double transferRate, SpeedUnit unit,
+    {double? jitter, double? ping});
 typedef ProgressCallback = void Function(
-  double percent,
-  double transferRate,
-  SpeedUnit unit,
-);
+    double percent, double transferRate, SpeedUnit unit,
+    {double? jitter, double? ping});
 typedef ErrorCallback = void Function(
     String errorMessage, String speedTestError);
 typedef CancelCallback = void Function();
@@ -110,5 +110,11 @@ abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
 
   Future<String?> getPlatformVersion() {
     throw UnimplementedError('getPlatformVersion() has not been implemented.');
+  }
+
+  /// Method to get client information.
+  Future<Client?> getClientInformation() {
+    throw UnimplementedError(
+        'getClientInformation() has not been implemented.');
   }
 }

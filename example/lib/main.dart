@@ -105,6 +105,13 @@ class _MyAppState extends State<MyApp> {
                     await internetSpeedTest.startTesting(
                         downloadTestServer: 'http://localhost:8080',
                         uploadTestServer: 'http://localhost:8080',
+                        onGetIPDone: (Client? client) {
+                          setState(() {
+                            _ip = client?.ip;
+                            _asn = client?.asn;
+                            _isp = client?.isp;
+                          });
+                        },
                         onStarted: () {
                           setState(() => _testInProgress = true);
                         },

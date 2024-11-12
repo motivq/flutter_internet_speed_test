@@ -17,12 +17,11 @@ import 'models/server_selection_response.dart';
 import 'speed_test.dart';
 
 typedef CancelListening = void Function();
-typedef DoneCallback = void Function(double transferRate, SpeedUnit unit);
+typedef DoneCallback = void Function(double transferRate, SpeedUnit unit,
+    {double? jitter, double? ping});
 typedef ProgressCallback = void Function(
-  double percent,
-  double transferRate,
-  SpeedUnit unit,
-);
+    double percent, double transferRate, SpeedUnit unit,
+    {double? jitter, double? ping});
 typedef ErrorCallback = void Function(
     String errorMessage, String speedTestError);
 typedef CancelCallback = void Function();
@@ -117,7 +116,6 @@ class MethodChannelFlutterInternetSpeedTest
   double _pingStatus = 0.0;
   double _jitterStatus = 0.0;
   double _pingProgress = 0.0;
-  int _testState = -1;
 
   // JavaScript Speedtest object
   // JsObject? _downloadSpeedTest;
@@ -183,24 +181,26 @@ class MethodChannelFlutterInternetSpeedTest
   var _downloadCompleter = Completer<void>();
   var _uploadCompleter = Completer<void>();
 
-  Future<void> _getIpAndStartDownloadTest() async {
-    if (_client == null) {
-      _downloadSpeedTest!.getIp((JSString ispInfo) {
-        final decodedIspInfo = json.decode(ispInfo.toDart);
-        // check if this is a valid type
-        if (decodedIspInfo is Map<String, dynamic>) {
-          _client = Client.fromNewModel(decodedIspInfo);
-        } else {
-          throw Exception(
-              'Invalid ispInfo type. likely the server url for getIP is wrong' +
-                  (_speedTestConfig?.getIpUrl ?? ""));
-        }
+  Future<Client> _fetchClientFromIp(ISpeedtest speedTest) async {
+    final completer = Completer<Client>();
 
-        _downloadSpeedTest!.startDownloadTest();
-      });
-    } else {
-      _downloadSpeedTest!.startDownloadTest();
-    }
+    speedTest.getIp((JSString ispInfo) {
+      final decodedIspInfo = json.decode(ispInfo.toDart);
+      if (decodedIspInfo is Map<String, dynamic>) {
+        final client = Client.fromNewModel(decodedIspInfo);
+        completer.complete(client);
+      } else {
+        completer.completeError(Exception(
+            'Invalid ispInfo type. likely the server url for getIP is wrong${_speedTestConfig?.getIpUrl ?? ""}'));
+      }
+    });
+
+    return completer.future;
+  }
+
+  Future<void> _getIpAndStartDownloadTest() async {
+    _client ??= await _fetchClientFromIp(_downloadSpeedTest!);
+    _downloadSpeedTest!.startDownloadTest();
     return _downloadCompleter.future;
   }
 
@@ -214,8 +214,7 @@ class MethodChannelFlutterInternetSpeedTest
           _client = Client.fromNewModel(decodedIspInfo);
         } else {
           throw Exception(
-              'Invalid ispInfo type. likely the server url for getIP is wrong' +
-                  (_speedTestConfig?.getIpUrl ?? ""));
+              'Invalid ispInfo type. likely the server url for getIP is wrong${_speedTestConfig?.getIpUrl ?? ""}');
         }
 
         _uploadSpeedTest!.startUploadTest();
@@ -238,8 +237,8 @@ class MethodChannelFlutterInternetSpeedTest
       // Load server list and select the server
       await loadDownloadServerList(_speedTestConfig!.serverListUrl, (servers) {
         if (servers != null) {
-          var mappedServers = jsObjectToMap(servers);
-          print(mappedServers);
+          //var mappedServers = jsObjectToMap(servers);
+          //print(mappedServers);
 
           selectDownloadServer((bestServer) {
             if (bestServer != null) {
@@ -347,6 +346,8 @@ class MethodChannelFlutterInternetSpeedTest
     };
   }
 
+//TODO: need to implement the start ping testing
+// have
   @override
   Future<CancelListening> startPingTesting({
     required DoneCallback onDone,
@@ -473,7 +474,7 @@ class MethodChannelFlutterInternetSpeedTest
       await loadDownloadServerList(serverListUrl, (servers) {
         if (servers != null) {
           var mappedServers = jsObjectToMap(servers);
-          print(mappedServers);
+          //print(mappedServers);
 
           selectDownloadServer((bestServer) {
             if (bestServer != null) {
@@ -536,9 +537,16 @@ class MethodChannelFlutterInternetSpeedTest
 
     // Extract values
     _dlStatus = double.tryParse(result['dlStatus'].toString()) ?? 0.0;
-    _ulStatus = double.tryParse(result['ulStatus'].toString()) ?? 0.0;
     _dlProgress = double.tryParse(result['dlProgress'].toString()) ?? 0.0;
+    // upload test
+    _ulStatus = double.tryParse(result['ulStatus'].toString()) ?? 0.0;
     _ulProgress = double.tryParse(result['ulProgress'].toString()) ?? 0.0;
+
+    //ping test
+    _pingStatus = double.tryParse(result['pingStatus'].toString()) ?? 0.0;
+    _pingProgress = double.tryParse(result['pingProgress'].toString()) ?? 0.0;
+    _jitterStatus = double.tryParse(result['jitterStatus'].toString()) ?? 0.0;
+
     final _testType = result['testType']?.toString() ?? "";
 
     // Callbacks
@@ -546,12 +554,17 @@ class MethodChannelFlutterInternetSpeedTest
     if (callbackTuple != null) {
       switch (_testType) {
         case 'download':
-          callbackTuple.item2(_dlProgress * 100, _dlStatus, SpeedUnit.mbps);
+          callbackTuple.item2(_dlProgress * 100, _dlStatus, SpeedUnit.mbps,
+              jitter: _jitterStatus, ping: _pingStatus);
           break;
         case 'upload':
-          callbackTuple.item2(_ulProgress * 100, _ulStatus, SpeedUnit.mbps);
+          callbackTuple.item2(_ulProgress * 100, _ulStatus, SpeedUnit.mbps,
+              jitter: _jitterStatus, ping: _pingStatus);
           break;
-        // Handle other test types if needed
+        case 'ping':
+          callbackTuple.item2(_pingProgress * 100, _pingStatus, SpeedUnit.ms,
+              jitter: _jitterStatus, ping: _pingStatus);
+          break;
       }
     }
   }
@@ -609,7 +622,26 @@ class MethodChannelFlutterInternetSpeedTest
   Future<void> resetTest({bool softReset = false}) async {
     _downloadCompleter = Completer<void>();
     _uploadCompleter = Completer<void>();
+    if (!softReset) {
+      _speedTestConfig = null;
+    }
     _downloadSpeedTest!.callMethod('reset', [softReset]);
     _uploadSpeedTest!.callMethod('reset', [softReset]);
+  }
+
+  @override
+  Future<Client> getClientInformation() async {
+    try {
+      _client ??= await _fetchClientFromIp(_downloadSpeedTest!);
+    } catch (e) {
+      // Handle the error appropriately, e.g., log it or rethrow
+      throw Exception('Failed to fetch client information: $e');
+    }
+
+    if (_client == null) {
+      throw Exception('Client information could not be retrieved.');
+    }
+
+    return _client!;
   }
 }

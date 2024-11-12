@@ -360,4 +360,9 @@ class FlutterInternetSpeedTestWeb extends FlutterInternetSpeedTestPlatform {
   double _degreesToRadians(double degrees) {
     return degrees * pi / 180;
   }
+
+  @override
+  Future<Client?> getClientInformation() async {
+    return null;
+  }
 }
