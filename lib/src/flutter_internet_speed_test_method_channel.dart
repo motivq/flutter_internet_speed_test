@@ -153,7 +153,7 @@ class MethodChannelFlutterInternetSpeedTest
       {Map<String, dynamic>? args,
       int fileSize = 10000000}) async {
     methodChannel.setMethodCallHandler(_methodCallHandler);
-    int currentListenerId = callbacksEnum.index;
+    String currentListenerId = callbacksEnum.toString();
     if (isLogEnabled) {
       _logger.d('test $currentListenerId');
     }
