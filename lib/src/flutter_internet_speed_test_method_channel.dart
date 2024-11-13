@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,8 @@ class MethodChannelFlutterInternetSpeedTest
   final methodChannel = const MethodChannel('com.shaz.plugin.fist/method');
   final _logger = Logger();
 
+  Client? _client;
+
   Future<void> _methodCallHandler(MethodCall call) async {
     if (isLogEnabled) {
       _logger.d('arguments are ${call.arguments}');
@@ -45,21 +48,22 @@ class MethodChannelFlutterInternetSpeedTest
             SpeedUnit unit = SpeedUnit.kbps;
             average /= 1000;
             unit = SpeedUnit.mbps;
-            callbacksById[call.arguments["id"]]!.item3(average, unit);
+            callbacksById[call.arguments["id"].toString()]!
+                .item3(average, unit);
             downloadSteps = 0;
             downloadRate = 0;
-            callbacksById.remove(call.arguments["id"]);
+            callbacksById.remove(call.arguments["id"].toString());
           } else if (call.arguments['type'] == ListenerEnum.error.index) {
             if (isLogEnabled) {
               _logger.d('onError : ${call.arguments["speedTestError"]}');
               _logger.d('onError : ${call.arguments["errorMessage"]}');
             }
-            callbacksById[call.arguments["id"]]!.item1(
+            callbacksById[call.arguments["id"].toString()]!.item1(
                 call.arguments['errorMessage'],
                 call.arguments['speedTestError']);
             downloadSteps = 0;
             downloadRate = 0;
-            callbacksById.remove(call.arguments["id"]);
+            callbacksById.remove(call.arguments["id"].toString());
           } else if (call.arguments['type'] == ListenerEnum.progress.index) {
             double rate = (call.arguments['transferRate'] ~/ 1000).toDouble();
             if (isLogEnabled) {
@@ -70,16 +74,16 @@ class MethodChannelFlutterInternetSpeedTest
             SpeedUnit unit = SpeedUnit.kbps;
             rate /= 1000;
             unit = SpeedUnit.mbps;
-            callbacksById[call.arguments["id"]]!
+            callbacksById[call.arguments["id"].toString()]!
                 .item2(call.arguments['percent'].toDouble(), rate, unit);
           } else if (call.arguments['type'] == ListenerEnum.cancel.index) {
             if (isLogEnabled) {
               _logger.d('onCancel : ${call.arguments["id"]}');
             }
-            callbacksById[call.arguments["id"]]!.item4();
+            callbacksById[call.arguments["id"].toString()]!.item4();
             downloadSteps = 0;
             downloadRate = 0;
-            callbacksById.remove(call.arguments["id"]);
+            callbacksById.remove(call.arguments["id"].toString());
           }
         } else if (call.arguments["id"] as int ==
             CallbacksEnum.startUploadTesting.index) {
@@ -99,16 +103,17 @@ class MethodChannelFlutterInternetSpeedTest
             SpeedUnit unit = SpeedUnit.kbps;
             average /= 1000;
             unit = SpeedUnit.mbps;
-            callbacksById[call.arguments["id"]]!.item3(average, unit);
+            callbacksById[call.arguments["id"].toString()]!
+                .item3(average, unit);
             uploadSteps = 0;
             uploadRate = 0;
-            callbacksById.remove(call.arguments["id"]);
+            callbacksById.remove(call.arguments["id"].toString());
           } else if (call.arguments['type'] == ListenerEnum.error.index) {
             if (isLogEnabled) {
               _logger.d('onError : ${call.arguments["speedTestError"]}');
               _logger.d('onError : ${call.arguments["errorMessage"]}');
             }
-            callbacksById[call.arguments["id"]]!.item1(
+            callbacksById[call.arguments["id"].toString()]!.item1(
                 call.arguments['errorMessage'],
                 call.arguments['speedTestError']);
           } else if (call.arguments['type'] == ListenerEnum.progress.index) {
@@ -121,16 +126,16 @@ class MethodChannelFlutterInternetSpeedTest
             SpeedUnit unit = SpeedUnit.kbps;
             rate /= 1000.0;
             unit = SpeedUnit.mbps;
-            callbacksById[call.arguments["id"]]!
+            callbacksById[call.arguments["id"].toString()]!
                 .item2(call.arguments['percent'].toDouble(), rate, unit);
           } else if (call.arguments['type'] == ListenerEnum.cancel.index) {
             if (isLogEnabled) {
               _logger.d('onCancel : ${call.arguments["id"]}');
             }
-            callbacksById[call.arguments["id"]]!.item4();
+            callbacksById[call.arguments["id"].toString()]!.item4();
             downloadSteps = 0;
             downloadRate = 0;
-            callbacksById.remove(call.arguments["id"]);
+            callbacksById.remove(call.arguments["id"].toString());
           }
         }
 //        callbacksById[call.arguments["id"]](call.arguments["args"]);
@@ -153,11 +158,12 @@ class MethodChannelFlutterInternetSpeedTest
       {Map<String, dynamic>? args,
       int fileSize = 10000000}) async {
     methodChannel.setMethodCallHandler(_methodCallHandler);
-    String currentListenerId = callbacksEnum.toString();
+    int currentListenerId = callbacksEnum.index;
+
     if (isLogEnabled) {
       _logger.d('test $currentListenerId');
     }
-    callbacksById[currentListenerId] = callback;
+    callbacksById[currentListenerId.toString()] = callback;
     await methodChannel.invokeMethod(
       "startListening",
       {
@@ -169,7 +175,7 @@ class MethodChannelFlutterInternetSpeedTest
     );
     return () {
       methodChannel.invokeMethod("cancelListening", currentListenerId);
-      callbacksById.remove(currentListenerId);
+      callbacksById.remove(currentListenerId.toString());
     };
   }
 
@@ -214,8 +220,7 @@ class MethodChannelFlutterInternetSpeedTest
     await _toggleLog(logEnabled);
   }
 
-  @override
-  Future<ServerSelectionResponse?> getDefaultServer({
+  Future<ServerSelectionResponse?> _fetchServerSelectionResponse({
     String? serverListUrl,
     Map<String, dynamic>? additionalConfigs,
   }) async {
@@ -232,7 +237,7 @@ class MethodChannelFlutterInternetSpeedTest
             serverUrl = Uri.parse(
                 'https://api.fast.com/netflix/speedtest/v2?https=true&token=$token&urlCount=5');
           } else {
-            return null; //TODO: what? // Return null if token is not found
+            return null; // Return null if token is not found
           }
         } else {
           serverUrl = Uri.parse(serverListUrl);
@@ -241,12 +246,12 @@ class MethodChannelFlutterInternetSpeedTest
         var serverResponse = await http.get(serverUrl);
         var serverSelectionResponse =
             ServerSelectionResponse.fromJson(json.decode(serverResponse.body));
-
+        _client = serverSelectionResponse.client;
         // Apply additional configurations if provided
         if (additionalConfigs != null) {
           additionalConfigs.forEach((key, value) {
             _logger.d('Config $key: $value');
-            // Implement any specific logic needed for additionalConfigs
+            // Doesn't apply to this implementation
           });
         }
 
@@ -260,6 +265,25 @@ class MethodChannelFlutterInternetSpeedTest
       }
     }
     return null;
+  }
+
+  @override
+  Future<ServerSelectionResponse?> getDefaultServer({
+    String? serverListUrl,
+    Map<String, dynamic>? additionalConfigs,
+  }) async {
+    return await _fetchServerSelectionResponse(
+      serverListUrl: serverListUrl,
+      additionalConfigs: additionalConfigs,
+    );
+  }
+
+  @override
+  Future<Client?> getClientInformation() async {
+    if (_client == null) {
+      await _fetchServerSelectionResponse();
+    }
+    return _client;
   }
 
   @override
@@ -285,11 +309,21 @@ class MethodChannelFlutterInternetSpeedTest
 
   @override
   Future<void> resetTest({bool softReset = false}) async {
-    return; //Nothing to do here
-  }
+    // Reset client information
+    _client = null;
 
-  @override
-  Future<Client?> getClientInformation() async {
-    return null;
+    // Clear callbacks
+    callbacksById.clear();
+
+    // Reset download/upload state
+    downloadSteps = 0;
+    downloadRate = 0;
+    uploadSteps = 0;
+    uploadRate = 0;
+
+    // Optionally reset logging state
+    if (!softReset) {
+      logEnabled = false;
+    }
   }
 }
