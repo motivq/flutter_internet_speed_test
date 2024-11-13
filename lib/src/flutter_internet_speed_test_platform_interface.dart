@@ -35,7 +35,7 @@ abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
   /// Defaults to [MethodChannelFlutterInternetSpeedTest].
   static FlutterInternetSpeedTestPlatform get instance => _instance;
 
-  Map<int,
+  Map<String,
           Tuple4<ErrorCallback, ProgressCallback, DoneCallback, CancelCallback>>
       callbacksById = {};
   int downloadRate = 0;

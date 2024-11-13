@@ -117,12 +117,6 @@ class MethodChannelFlutterInternetSpeedTest
   double _jitterStatus = 0.0;
   double _pingProgress = 0.0;
 
-  // JavaScript Speedtest object
-  // JsObject? _downloadSpeedTest;
-  // JsObject? _uploadSpeedTest;
-  // Current test ID
-  int _currentTestId = 0;
-
   // client object
   Client? _client;
 
@@ -310,8 +304,7 @@ class MethodChannelFlutterInternetSpeedTest
   }) async {
     await ensureDownloadServerIsSelected(testServer);
 
-    _currentTestId++;
-    callbacksById[_currentTestId] =
+    callbacksById[TestType.download.toString()] =
         Tuple4(onError, onProgress, onDone, onCancel);
 
     if (_downloadSpeedTest != null) {
@@ -337,8 +330,7 @@ class MethodChannelFlutterInternetSpeedTest
   }) async {
     await ensureUploadServerIsSelected(testServer);
 
-    _currentTestId++;
-    callbacksById[_currentTestId] =
+    callbacksById[TestType.upload.toString()] =
         Tuple4(onError, onProgress, onDone, onCancel);
 
     if (_uploadSpeedTest != null) {
@@ -364,10 +356,9 @@ class MethodChannelFlutterInternetSpeedTest
     required String testServer,
   }) async {
     await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
-    _currentTestId++;
 
     // Store callbacks
-    callbacksById[_currentTestId] =
+    callbacksById[TestType.ping.toString()] =
         Tuple4(onError, onProgress, onDone, onCancel);
 
     // Set up settings
@@ -537,48 +528,67 @@ class MethodChannelFlutterInternetSpeedTest
     return null;
   }
 
-  // Handler for onupdate event
-  void _onUpdate(dynamic data) {
-    // Convert JavaScript object to Dart Map
-    Map<String, dynamic> result = Map<String, dynamic>.from(jsToNative(data));
-
-    // Extract values
+  // Handler for download update event
+  void _onDownloadUpdate(Map<String, dynamic> result) {
     _dlStatus = double.tryParse(result['dlStatus'].toString()) ?? 0.0;
     _dlProgress = double.tryParse(result['dlProgress'].toString()) ?? 0.0;
-    // upload test
+
+    var callbackTuple = callbacksById[TestType.download.toString()];
+    if (callbackTuple != null) {
+      print("Download and dlProgress: " +
+          _dlProgress.toString() +
+          " and the testid: " +
+          TestType.download.toString());
+      callbackTuple.item2(_dlProgress * 100, _dlStatus, SpeedUnit.mbps,
+          jitter: _jitterStatus, ping: _pingStatus);
+    }
+  }
+
+  // Handler for upload update event
+  void _onUploadUpdate(Map<String, dynamic> result) {
     _ulStatus = double.tryParse(result['ulStatus'].toString()) ?? 0.0;
     _ulProgress = double.tryParse(result['ulProgress'].toString()) ?? 0.0;
 
-    //ping test
+    var callbackTuple = callbacksById[TestType.upload.toString()];
+    if (callbackTuple != null) {
+      print("Upload and ulProgress: " +
+          _ulProgress.toString() +
+          " and the testid: " +
+          TestType.upload.toString());
+      callbackTuple.item2(_ulProgress * 100, _ulStatus, SpeedUnit.mbps,
+          jitter: _jitterStatus, ping: _pingStatus);
+    }
+  }
+
+  // Original onUpdate method refactored to use the new methods
+  void _onUpdate(dynamic data) {
+    Map<String, dynamic> result = Map<String, dynamic>.from(jsToNative(data));
     _pingStatus = double.tryParse(result['pingStatus'].toString()) ?? 0.0;
     _pingProgress = double.tryParse(result['pingProgress'].toString()) ?? 0.0;
     _jitterStatus = double.tryParse(result['jitterStatus'].toString()) ?? 0.0;
 
-    final _testType = result['testType']?.toString() ?? "";
+    final String testType = result['testType']?.toString() ?? "";
 
-    // Callbacks
-    var callbackTuple = callbacksById[_currentTestId];
-    if (callbackTuple != null) {
-      switch (_testType) {
-        case 'download':
-          callbackTuple.item2(_dlProgress * 100, _dlStatus, SpeedUnit.mbps,
-              jitter: _jitterStatus, ping: _pingStatus);
-          break;
-        case 'upload':
-          callbackTuple.item2(_ulProgress * 100, _ulStatus, SpeedUnit.mbps,
-              jitter: _jitterStatus, ping: _pingStatus);
-          break;
-        case 'ping':
+    switch (testType) {
+      case 'download':
+        _onDownloadUpdate(result);
+        break;
+      case 'upload':
+        _onUploadUpdate(result);
+        break;
+      case 'ping':
+        var callbackTuple = callbacksById[TestType.ping.toString()];
+        if (callbackTuple != null) {
           callbackTuple.item2(_pingProgress * 100, _pingStatus, SpeedUnit.ms,
               jitter: _jitterStatus, ping: _pingStatus);
-          break;
-      }
+        }
+        break;
     }
   }
 
   // Handler for onend event
   void _onEndDownload(bool aborted, String testType, String finalSpeed) {
-    var callbackTuple = callbacksById[_currentTestId];
+    var callbackTuple = callbacksById[TestType.download.toString()];
     if (callbackTuple != null) {
       if (aborted) {
         callbackTuple.item1('Test aborted', 'Aborted');
@@ -590,11 +600,12 @@ class MethodChannelFlutterInternetSpeedTest
       }
       //todo: THIS DOESN'T HANDLE THE UPLOAD CASE
       _downloadCompleter.complete();
+      callbacksById.remove(TestType.download.toString());
     }
   }
 
   void _onEndUpload(bool aborted, String testType, String finalSpeed) {
-    var callbackTuple = callbacksById[_currentTestId];
+    var callbackTuple = callbacksById[TestType.upload.toString()];
     if (callbackTuple != null) {
       if (aborted) {
         callbackTuple.item1('Test aborted', 'Aborted');
@@ -606,20 +617,22 @@ class MethodChannelFlutterInternetSpeedTest
       }
       //todo: THIS DOESN'T HANDLE THE UPLOAD CASE
       _uploadCompleter.complete();
+      callbacksById.remove(TestType.upload.toString());
     }
   }
 
   void _onEndPing(
       bool aborted, String testType, double finalSpeed, double jitter) {
-    var callbackTuple = callbacksById[_currentTestId];
+    var callbackTuple = callbacksById[TestType.ping.toString()];
     if (callbackTuple != null) {
       callbackTuple.item3(finalSpeed, SpeedUnit.mbps);
+      callbacksById.remove(TestType.ping.toString());
     }
   }
 
   void _onEndAllTests(bool aborted, String testType, double dlStatus,
       double ulStatus, double pingStatus, double jitterStatus) {
-    var callbackTuple = callbacksById[_currentTestId];
+    var callbackTuple = callbacksById[testType];
     if (callbackTuple != null) {
       callbackTuple.item3(dlStatus, SpeedUnit.mbps);
     }

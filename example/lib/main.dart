@@ -103,13 +103,17 @@ class _MyAppState extends State<MyApp> {
                   onPressed: () async {
                     reset();
                     await internetSpeedTest.startTesting(
-                        downloadTestServer: 'http://localhost:8080',
-                        uploadTestServer: 'http://localhost:8080',
+                        downloadTestServer:
+                            kIsWeb ? 'http://localhost:8080' : null,
+                        uploadTestServer:
+                            kIsWeb ? 'http://localhost:8080' : null,
                         onGetIPDone: (Client? client) {
                           setState(() {
-                            _ip = client?.ip;
-                            _asn = client?.asn;
-                            _isp = client?.isp;
+                            if (client != null) {
+                              _ip = client.ip;
+                              _asn = client.asn;
+                              _isp = client.isp;
+                            }
                           });
                         },
                         onStarted: () {
