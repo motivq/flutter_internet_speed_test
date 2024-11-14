@@ -17,12 +17,12 @@ class Times {
 
   factory Times.fromJson(Map<String, dynamic> json) {
     return Times(
-      downloadOne: int.parse(json['dl1']),
-      downloadTwo: int.parse(json['dl2']),
-      downloadThree: int.parse(json['dl3']),
-      uploadOne: int.parse(json['ul1']),
-      uploadTwo: int.parse(json['ul2']),
-      uploadThree: int.parse(json['ul3']),
+      downloadOne: int.parse(json['dl1'] as String),
+      downloadTwo: int.parse(json['dl2'] as String),
+      downloadThree: int.parse(json['dl3'] as String),
+      uploadOne: int.parse(json['ul1'] as String),
+      uploadTwo: int.parse(json['ul2'] as String),
+      uploadThree: int.parse(json['ul3'] as String),
     );
   }
 }

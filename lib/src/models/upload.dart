@@ -9,8 +9,8 @@ class Upload {
 
   factory Upload.fromJson(Map<String, dynamic> json) {
     return Upload(
-      length: double.parse(json['testlength']),
-      packetLength: int.parse(json['packetlength']),
+      length: double.parse(json['testlength'] as String),
+      packetLength: int.parse(json['packetlength'] as String),
     );
   }
 }

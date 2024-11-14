@@ -9,11 +9,13 @@ class ServerSelectionResponse {
   ServerSelectionResponse({this.client, this.targets});
 
   ServerSelectionResponse.fromJson(Map<String, dynamic> json) {
-    client = json['client'] != null ? Client.fromJson(json['client']) : null;
+    client = json['client'] != null
+        ? Client.fromJson(json['client'] as Map<String, dynamic>)
+        : null;
     targets = <Targets>[];
     if (json['targets'] != null) {
       json['targets'].forEach((v) {
-        targets!.add(Targets.fromJson(v));
+        targets!.add(Targets.fromJson(v as Map<String, dynamic>));
       });
     }
   }
@@ -46,10 +48,11 @@ class Targets {
   }
 
   Targets.fromJson(Map<String, dynamic> json) {
-    name = json['name'];
-    url = json['url'];
-    location =
-        json['location'] != null ? Location.fromJson(json['location']) : null;
+    name = json['name'] as String?;
+    url = json['url'] as String?;
+    location = json['location'] != null
+        ? Location.fromJson(json['location'] as Map<String, dynamic>)
+        : null;
   }
 
   Map<String, dynamic> toJson() {

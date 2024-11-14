@@ -41,18 +41,19 @@ class Client {
     isp = json['isp'] as String;
     latitude = double.parse((json['lat']?.toString() ?? '0.0'));
     longitude = double.parse((json['lon']?.toString() ?? '0.0'));
-    asn = json['asn'];
-    location =
-        json['location'] != null ? Location.fromJson(json['location']) : null;
+    asn = json['asn'] as String?;
+    location = json['location'] != null
+        ? Location.fromJson(json['location'] as Map<String, dynamic>)
+        : null;
     // Parse additional fields
-    city = json['city'] ?? '';
-    country = json['country'] ?? '';
-    hostname = json['hostname'] ?? '';
-    loc = json['loc'] ?? '';
-    org = json['org'] ?? '';
-    postal = json['postal'] ?? '';
-    region = json['region'] ?? '';
-    timezone = json['timezone'] ?? '';
+    city = json['city'] as String? ?? '';
+    country = json['country'] as String? ?? '';
+    hostname = json['hostname'] as String? ?? '';
+    loc = json['loc'] as String? ?? '';
+    org = json['org'] as String? ?? '';
+    postal = json['postal'] as String? ?? '';
+    region = json['region'] as String? ?? '';
+    timezone = json['timezone'] as String? ?? '';
   }
 
   Map<String, dynamic> toJson() {
@@ -80,21 +81,21 @@ class Client {
   // Factory constructor to create a Client from the new model
   factory Client.fromNewModel(Map<String, dynamic> json) {
     return Client(
-      ip: json['ip'],
-      isp: json['org'], // Assuming 'org' is equivalent to 'isp'
-      latitude: double.parse(json['latitude']),
-      longitude: double.parse(json['longitude']),
+      ip: json['ip'] as String,
+      isp: json['org'] as String, // Assuming 'org' is equivalent to 'isp'
+      latitude: double.parse(json['latitude'] as String),
+      longitude: double.parse(json['longitude'] as String),
       asn: null, // Assuming ASN is not available in the new model
       location: null, // Assuming Location is not available in the new model
       // Initialize additional fields
-      city: json['city'] ?? '',
-      country: json['country'] ?? '',
-      hostname: json['hostname'] ?? '',
-      loc: json['loc'] ?? '',
-      org: json['org'] ?? '',
-      postal: json['postal'] ?? '',
-      region: json['region'] ?? '',
-      timezone: json['timezone'] ?? '',
+      city: json['city'] as String? ?? '',
+      country: json['country'] as String? ?? '',
+      hostname: json['hostname'] as String? ?? '',
+      loc: json['loc'] as String? ?? '',
+      org: json['org'] as String? ?? '',
+      postal: json['postal'] as String? ?? '',
+      region: json['region'] as String? ?? '',
+      timezone: json['timezone'] as String? ?? '',
     );
   }
 

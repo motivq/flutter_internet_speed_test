@@ -33,18 +33,19 @@ class Server {
     return Server(
       cc: json['cc'] as String,
       country: json['country'] as String,
-      id: int.parse(json['id']),
-      latitude: double.parse(json['lat']),
-      longitude: double.parse(json['lon']),
+      id: int.parse(json['id'] as String),
+      latitude: double.parse(json['lat'] as String),
+      longitude: double.parse(json['lon'] as String),
       name: json['name'] as String,
       sponsor: json['sponsor'] as String,
       url: json['url'] as String,
       url2: json['url2'] as String?,
       host: json['host'] as String,
-      distance:
-          json.containsKey('distance') ? double.parse(json['distance']) : null,
+      distance: json.containsKey('distance')
+          ? double.parse(json['distance'] as String)
+          : null,
       latency: json.containsKey('latency')
-          ? Duration(milliseconds: int.parse(json['latency']))
+          ? Duration(milliseconds: int.parse(json['latency'] as String))
           : null,
     );
   }

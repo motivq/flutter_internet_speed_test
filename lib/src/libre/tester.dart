@@ -44,9 +44,10 @@ class Speedtest {
    * Invalid values or nonexistent parameters will be ignored by the speedtest worker.
    */
   void setParameter(String parameter, dynamic value) {
-    if (_state == 3)
+    if (_state == 3) {
       throw Exception(
           "You cannot change the test settings while running the test");
+    }
     _settings[parameter] = value;
     if (parameter == "telemetry_extra") {
       _originalExtra = _settings['telemetry_extra'];
@@ -67,7 +68,7 @@ class Speedtest {
             "Server address string missing from server definition (server)");
       }
 
-      String serverUrl = server['server'];
+      String serverUrl = server['server'] as String;
 
       if (!serverUrl.endsWith("/")) {
         serverUrl += "/";
@@ -113,8 +114,9 @@ class Speedtest {
   void addTestPoint(Map<String, dynamic> server) {
     _checkServerDefinition(server);
     if (_state == 0) _state = 1;
-    if (_state != 1)
+    if (_state != 1) {
       throw Exception("You can't add a server after server selection");
+    }
     _settings['mpot'] = true;
     _serverList.add(server);
   }
@@ -144,14 +146,16 @@ class Speedtest {
   void loadServerList(
       String url, void Function(List<Map<String, dynamic>>? servers) result) {
     if (_state == 0) _state = 1;
-    if (_state != 1)
+    if (_state != 1) {
       throw Exception("You can't add a server after server selection");
+    }
     _settings['mpot'] = true;
 
     HttpRequest xhr = HttpRequest();
     xhr.onLoad.listen((event) {
       try {
-        List<dynamic> serversJson = jsonDecode(xhr.responseText!);
+        List<dynamic> serversJson =
+            jsonDecode(xhr.responseText!) as List<dynamic>;
         List<Map<String, dynamic>> servers =
             serversJson.cast<Map<String, dynamic>>();
         for (var server in servers) {
@@ -176,8 +180,9 @@ class Speedtest {
    * Returns the selected server (multiple points of test)
    */
   Map<String, dynamic> getSelectedServer() {
-    if (_state < 2 || _selectedServer == null)
+    if (_state < 2 || _selectedServer == null) {
       throw Exception("No server is selected");
+    }
     return _selectedServer!;
   }
 
@@ -186,8 +191,9 @@ class Speedtest {
    */
   void setSelectedServer(Map<String, dynamic> server) {
     _checkServerDefinition(server);
-    if (_state == 3)
+    if (_state == 3) {
       throw Exception("You can't select a server while the test is running");
+    }
     _selectedServer = server;
     _state = 2;
   }
@@ -200,8 +206,9 @@ class Speedtest {
     if (_state != 1) {
       if (_state == 0) throw Exception("No test points added");
       if (_state == 2) throw Exception("Server already selected");
-      if (_state >= 3)
+      if (_state >= 3) {
         throw Exception("You can't select a server while the test is running");
+      }
     }
     if (_selectServerCalled) {
       throw Exception("selectServer already called");
@@ -259,14 +266,17 @@ class Speedtest {
         return;
       } else {
         while (i++ < PINGS) {
-          int t = await ping(server['server'] + server['pingURL']);
+          String pingURL = server['pingURL'] as String;
+          int t = await ping((server['server'] as String) + pingURL);
           if (t >= 0) {
-            if (t < server['pingT'] || server['pingT'] == -1)
+            if (t < (server['pingT'] as num) || server['pingT'] == -1) {
               server['pingT'] = t;
-            if (t < SLOW_THRESHOLD)
+            }
+            if (t < SLOW_THRESHOLD) {
               continue;
-            else
+            } else {
               break;
+            }
           } else {
             break;
           }
@@ -295,7 +305,8 @@ class Speedtest {
       select(serverList).then((_) {
         for (var server in serverList) {
           if (server['pingT'] != -1 &&
-              (bestServer == null || server['pingT'] < bestServer!['pingT'])) {
+              (bestServer == null ||
+                  (server['pingT'] as int) < (bestServer!['pingT'] as int))) {
             bestServer = server;
           }
         }
@@ -318,18 +329,20 @@ class Speedtest {
     if (_state == 3) throw Exception("Test already running");
     worker = Worker("speedtest_worker.js?r=${Random().nextDouble()}");
     worker!.onMessage.listen((MessageEvent e) {
-      if (e.data == _prevData)
+      if (e.data == _prevData) {
         return;
-      else
-        _prevData = e.data;
+      } else {
+        _prevData = e.data as String?;
+      }
 
-      Map<String, dynamic> data = jsonDecode(e.data as String);
+      Map<String, dynamic> data =
+          jsonDecode(e.data as String) as Map<String, dynamic>;
       try {
         if (onupdate != null) onupdate!(data);
       } catch (e) {
         print("Speedtest onupdate event threw exception: $e");
       }
-      if (data['testState'] >= 4) {
+      if ((data['testState'] as int) >= 4) {
         if (updater != null) updater!.cancel();
         _state = 4;
         try {
@@ -377,8 +390,9 @@ class Speedtest {
    * Aborts the test while it's running.
    */
   void abort() {
-    if (_state < 3)
+    if (_state < 3) {
       throw Exception("You cannot abort a test that's not started yet");
+    }
     if (_state < 4) worker!.postMessage("abort");
   }
 }

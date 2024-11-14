@@ -8,6 +8,7 @@ import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
+import 'package:logger/logger.dart';
 import 'package:tuple_dart/tuple.dart';
 
 import 'callbacks_enum.dart';
@@ -60,14 +61,18 @@ class SpeedTestConfig {
 
 class MethodChannelFlutterInternetSpeedTest
     extends FlutterInternetSpeedTestPlatform {
+  final Logger _logger;
+
   MethodChannelFlutterInternetSpeedTest({
     ISpeedtest? downloadSpeedTest,
     ISpeedtest? uploadSpeedTest,
-  }) {
+    ISpeedtest? latencySpeedTest,
+  }) : _logger = Logger() {
     _loadJavascriptFiles().then((_) {
       _downloadSpeedTest =
           downloadSpeedTest ?? _initializeJsSpeedtest('download');
       _uploadSpeedTest = uploadSpeedTest ?? _initializeJsSpeedtest('upload');
+      _latencySpeedTest = latencySpeedTest ?? _initializeJsSpeedtest('ping');
     }).catchError((error) {
       throw Exception('Failed to load JavaScript files: $error');
     });
@@ -88,7 +93,7 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   static JsSpeedtest _initializeJsSpeedtest(String type) {
-    final jsObject = context['Speedtest'];
+    final jsObject = context['Speedtest'] as JsFunction?;
     if (jsObject == null) {
       throw Exception('Speedtest JavaScript object is not available.');
     }
@@ -129,13 +134,15 @@ class MethodChannelFlutterInternetSpeedTest
     _speedTestConfig = config;
 
     if (configChanged) {
-      _downloadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
+      _downloadSpeedTest ??= JsSpeedtest(JsObject(
+          context['Speedtest'] as JsFunction, [
         'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
         'download'
       ]));
       _initializeSpeedTestInstance(_downloadSpeedTest!);
 
-      _uploadSpeedTest ??= JsSpeedtest(JsObject(context['Speedtest'], [
+      _uploadSpeedTest ??= JsSpeedtest(JsObject(
+          context['Speedtest'] as JsFunction, [
         'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
         'upload'
       ]));
@@ -151,8 +158,8 @@ class MethodChannelFlutterInternetSpeedTest
   Future<void> _copyTheTestPointsIfPossible() async {
     Completer<void> completer = Completer();
 
-    if (_downloadSpeedTest!.getState() >= 2 &&
-        _uploadSpeedTest!.getState() < 2) {
+    if ((_downloadSpeedTest!.getState() as int) >= 2 &&
+        (_uploadSpeedTest!.getState() as int) < 2) {
       final testPoints = _downloadSpeedTest!.getTestPoints();
       final selectedServer = _downloadSpeedTest!.getSelectedServer();
 
@@ -238,7 +245,7 @@ class MethodChannelFlutterInternetSpeedTest
       // Load server list and select the server
       await loadDownloadServerList(_speedTestConfig!.serverListUrl, (servers) {
         if (servers != null) {
-          //var mappedServers = jsObjectToMap(servers);
+          //var mappedServers = jsObjectToMap(servers as JsObject);
           //print(mappedServers);
 
           selectDownloadServer((bestServer) {
@@ -271,7 +278,7 @@ class MethodChannelFlutterInternetSpeedTest
       // Load server list and select the server
       await loadUploadServerList(_speedTestConfig!.serverListUrl, (servers) {
         if (servers != null) {
-          //var mappedServers = jsObjectToMap(servers);
+          //var mappedServers = jsObjectToMap(servers as JsObject);
           //print(mappedServers);
 
           selectUploadServer((bestServer) {
@@ -345,6 +352,45 @@ class MethodChannelFlutterInternetSpeedTest
     };
   }
 
+  @override
+  Future<CancelListening> startLatencyTesting({
+    required LatencyDoneCallback onDone,
+    required LatencyProgressCallback onProgress,
+    required ErrorCallback onError,
+    required CancelCallback onCancel,
+    required String testServer,
+  }) async {
+    await ensureLatencyServerIsSelected(testServer);
+
+    latencyCallbacksById[CallbacksEnum.startLatencyTesting.index.toString()] =
+        Tuple4(onError, onProgress, onDone, onCancel);
+
+    if (_latencySpeedTest != null) {
+      _latencySpeedTest!.onUpdate(_onLatencyUpdate);
+      _latencySpeedTest!.onEnd(_onEndLatency);
+    }
+
+    await _getIpAndStartLatencyTest();
+
+    return () {
+      cancelTest();
+    };
+  }
+
+  ISpeedtest? _latencySpeedTest;
+
+  Future<void> _getIpAndStartLatencyTest() async {
+    _client ??= await _fetchClientFromIp(_latencySpeedTest!);
+    _latencySpeedTest!.startPingTest();
+    // You might need to create a new Completer for latency if required
+    // return _latencyCompleter.future;
+  }
+
+  Future<void> ensureLatencyServerIsSelected(String testServer) async {
+    // Similar to ensureDownloadServerIsSelected
+    // Initialize _latencySpeedTest and select the server
+  }
+
 //TODO: need to implement the start ping testing
 // have
   @override
@@ -413,8 +459,9 @@ class MethodChannelFlutterInternetSpeedTest
 
   Map jsObjectToMap(JsObject object) {
     Map result = {};
-    for (var key in context['Object'].callMethod('keys', [object])) {
-      result[key] = jsToNative(object[key]);
+    var keys = context['Object'].callMethod('keys', [object]) as List;
+    for (var key in keys) {
+      result[key] = jsToNative(object[key as Object]);
     }
     return result;
   }
@@ -471,12 +518,12 @@ class MethodChannelFlutterInternetSpeedTest
     if (serverListUrl.isNotEmpty) {
       await loadDownloadServerList(serverListUrl, (servers) {
         if (servers != null) {
-          var mappedServers = jsObjectToMap(servers);
+          //var mappedServers = jsObjectToMap(servers as JsObject);
           //print(mappedServers);
 
           selectDownloadServer((bestServer) {
             if (bestServer != null) {
-              var dartedBestServer = jsObjectToMap(bestServer);
+              var dartedBestServer = jsObjectToMap(bestServer as JsObject);
               setSelectedDownloadServer(bestServer);
 
               List<Targets> targets = [
@@ -518,6 +565,9 @@ class MethodChannelFlutterInternetSpeedTest
     }
     if (_uploadSpeedTest != null) {
       _uploadSpeedTest!.callMethod('abort');
+    }
+    if (_latencySpeedTest != null) {
+      _latencySpeedTest!.callMethod('abort');
     }
     return true;
   }
@@ -562,7 +612,8 @@ class MethodChannelFlutterInternetSpeedTest
 
   // Original onUpdate method refactored to use the new methods
   void _onUpdate(dynamic data) {
-    Map<String, dynamic> result = Map<String, dynamic>.from(jsToNative(data));
+    Map<String, dynamic> result =
+        Map<String, dynamic>.from(jsToNative(data) as Map<dynamic, dynamic>);
     _pingStatus = double.tryParse(result['pingStatus'].toString()) ?? 0.0;
     _pingProgress = double.tryParse(result['pingProgress'].toString()) ?? 0.0;
     _jitterStatus = double.tryParse(result['jitterStatus'].toString()) ?? 0.0;
@@ -577,6 +628,7 @@ class MethodChannelFlutterInternetSpeedTest
         _onUploadUpdate(result);
         break;
       case 'ping':
+        print("Ping progress: " + _pingProgress.toString());
         var callbackTuple = callbacksById[TestType.ping.toString()];
         if (callbackTuple != null) {
           callbackTuple.item2(_pingProgress * 100, _pingStatus, SpeedUnit.ms,
@@ -635,6 +687,43 @@ class MethodChannelFlutterInternetSpeedTest
     var callbackTuple = callbacksById[testType];
     if (callbackTuple != null) {
       callbackTuple.item3(dlStatus, SpeedUnit.mbps);
+    }
+  }
+
+  void _onLatencyUpdate(dynamic data) {
+    Map<String, dynamic> result =
+        Map<String, dynamic>.from(jsToNative(data) as Map<dynamic, dynamic>);
+    _pingStatus = double.tryParse(result['pingStatus'].toString()) ?? 0.0;
+    _jitterStatus = double.tryParse(result['jitterStatus'].toString()) ?? 0.0;
+
+    var callbackTuple = latencyCallbacksById[
+        CallbacksEnum.startLatencyTesting.index.toString()];
+    if (callbackTuple != null) {
+      if (isLogEnabled) {
+        _logger.d('onLatencyProgress: latency=$_pingStatus');
+      }
+      callbackTuple.item2(_pingProgress * 100, _pingStatus, _jitterStatus);
+    }
+  }
+
+  void _onEndLatency(
+      bool aborted, String testType, String finalPing, String finalJitter) {
+    var callbackTuple = latencyCallbacksById[
+        CallbacksEnum.startLatencyTesting.index.toString()];
+    if (callbackTuple != null) {
+      if (aborted) {
+        callbackTuple.item1('Latency test aborted', 'Aborted');
+      } else {
+        double averageLatency = double.tryParse(finalPing) ?? 0.0;
+        double jitter = double.tryParse(finalJitter) ?? 0.0;
+        if (isLogEnabled) {
+          _logger
+              .d('onLatencyComplete: latency=$averageLatency, jitter=$jitter');
+        }
+        callbackTuple.item3(averageLatency, jitter);
+      }
+      latencyCallbacksById
+          .remove(CallbacksEnum.startLatencyTesting.index.toString());
     }
   }
 
