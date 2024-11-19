@@ -7,6 +7,7 @@ enum TestType {
 enum CallbacksEnum {
   startDownLoadTesting,
   startUploadTesting,
+  startLatencyTesting,
 }
 
 enum ListenerEnum {

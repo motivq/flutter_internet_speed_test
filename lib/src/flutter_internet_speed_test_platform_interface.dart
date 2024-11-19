@@ -21,6 +21,11 @@ typedef ErrorCallback = void Function(
     String errorMessage, String speedTestError);
 typedef CancelCallback = void Function();
 
+typedef LatencyProgressCallback = void Function(
+    double percent, double latency, double jitter);
+typedef LatencyDoneCallback = void Function(
+    double averageLatency, double jitter);
+
 abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
   /// Constructs a FlutterInternetSpeedTestPlatform.
   FlutterInternetSpeedTestPlatform() : super(token: _token);
@@ -38,6 +43,11 @@ abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
   Map<String,
           Tuple4<ErrorCallback, ProgressCallback, DoneCallback, CancelCallback>>
       callbacksById = {};
+  // New callback map for latency tests
+  Map<
+      String,
+      Tuple4<ErrorCallback, LatencyProgressCallback, LatencyDoneCallback,
+          CancelCallback>> latencyCallbacksById = {};
   int downloadRate = 0;
   int uploadRate = 0;
   int downloadSteps = 0;
@@ -116,5 +126,15 @@ abstract class FlutterInternetSpeedTestPlatform extends PlatformInterface {
   Future<Client?> getClientInformation() {
     throw UnimplementedError(
         'getClientInformation() has not been implemented.');
+  }
+
+  Future<CancelListening> startLatencyTesting({
+    required LatencyDoneCallback onDone,
+    required LatencyProgressCallback onProgress,
+    required ErrorCallback onError,
+    required CancelCallback onCancel,
+    required String testServer,
+  }) {
+    throw UnimplementedError('startLatencyTesting() has not been implemented.');
   }
 }

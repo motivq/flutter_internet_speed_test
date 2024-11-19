@@ -24,12 +24,14 @@ class Configuration {
 
   factory Configuration.fromJson(Map<String, dynamic> json) {
     return Configuration(
-      client: Client.fromJson(json['client']),
-      serverConfig: ServerConfig.fromJson(json['server-config']),
-      times: Times.fromJson(json['times']),
-      download: Download.fromJson(json['socket-download']),
-      upload: Upload.fromJson(json['socket-upload']),
-      latency: Latency.fromJson(json['socket-latency']),
+      client: Client.fromJson(json['client'] as Map<String, dynamic>),
+      serverConfig:
+          ServerConfig.fromJson(json['server-config'] as Map<String, dynamic>),
+      times: Times.fromJson(json['times'] as Map<String, dynamic>),
+      download:
+          Download.fromJson(json['socket-download'] as Map<String, dynamic>),
+      upload: Upload.fromJson(json['socket-upload'] as Map<String, dynamic>),
+      latency: Latency.fromJson(json['socket-latency'] as Map<String, dynamic>),
     );
   }
 }

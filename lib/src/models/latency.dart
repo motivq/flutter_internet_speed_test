@@ -7,7 +7,7 @@ class Latency {
 
   factory Latency.fromJson(Map<String, dynamic> json) {
     return Latency(
-      length: double.parse(json['testlength']),
+      length: double.parse(json['testlength'] as String),
     );
   }
 }

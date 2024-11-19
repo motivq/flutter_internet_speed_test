@@ -1,11 +1,18 @@
 {
   "cSpell.words": [
     "arraybuffer",
+    "instjitter",
     "instspd",
     "Kbps",
     "Mbps",
+    "Mebibits",
     "Millis",
-    "Speedtest"
+    "multistream",
+    "packetlength",
+    "Speedtest",
+    "testlength",
+    "tlog",
+    "tverb"
   ],
   "editor.formatOnPaste": true,
   "diffEditor.codeLens": true,

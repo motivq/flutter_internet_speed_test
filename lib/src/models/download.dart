@@ -9,8 +9,8 @@ class Download {
 
   factory Download.fromJson(Map<String, dynamic> json) {
     return Download(
-      length: double.parse(json['testlength']),
-      packetLength: int.parse(json['packetlength']),
+      length: double.parse(json['testlength'] as String),
+      packetLength: int.parse(json['packetlength'] as String),
     );
   }
 }

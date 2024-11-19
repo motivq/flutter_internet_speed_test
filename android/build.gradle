@@ -32,6 +32,12 @@ android {
     defaultConfig {
         minSdkVersion 24
     }
+
+    buildTypes {
+        customDebugType {
+            debuggable true
+        }
+    }
 }
 
 dependencies {

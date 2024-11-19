@@ -16,6 +16,11 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** FlutterInternetSpeedTestPlugin */
 class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
@@ -23,14 +28,18 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
     private val defaultTestTimeoutInMillis: Int = TimeUnit.SECONDS.toMillis(20).toInt()
     private val defaultResponseDelayInMillis: Int = TimeUnit.MILLISECONDS.toMillis(500).toInt()
 
-    private var result: Result? = null
-    private var speedTestSocket: SpeedTestSocket = SpeedTestSocket()
-
     private lateinit var methodChannel: MethodChannel
     private var activity: Activity? = null
     private var applicationContext: Context? = null
 
     private val logger = Logger()
+
+    // Executor service to manage threads
+    private val executorService = Executors.newCachedThreadPool()
+
+    private val activeListeners = mutableMapOf<Int, Any>()
+    private val activeSockets = mutableMapOf<Int, SpeedTestSocket>()
+    private val cancellationFlags = mutableMapOf<Int, AtomicBoolean>()
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         applicationContext = flutterPluginBinding.applicationContext
@@ -41,7 +50,6 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         print("FlutterInternetSpeedTestPlugin: onMethodCall: ${call.method}")
-        this.result = result
         when (call.method) {
             "startListening" -> mapToCall(result, call.arguments)
             "cancelListening" -> cancelListening(call.arguments, result)
@@ -89,6 +97,11 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                 "startUploadTesting",
                 argsMap["testServer"] as String,
                 fileSize)
+            CallbacksEnum.START_LATENCY_TESTING.ordinal -> startListening(args,
+                result,
+                "startLatencyTesting",
+                argsMap["testServer"] as String,
+                fileSize)
         }
     }
 
@@ -101,8 +114,6 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         }
     }
 
-    private val callbackById: MutableMap<Int, Runnable> = mutableMapOf()
-
     private fun startListening(
         args: Any,
         result: Result,
@@ -111,235 +122,341 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         fileSize: Int,
     ) {
         // Get callback id
-        logger.print("test starting")
+        logger.print("Test starting")
         val currentListenerId = args as Int
-        val runnable = Runnable {
-            if (callbackById.containsKey(currentListenerId)) {
-                val argsMap: MutableMap<String, Any> = mutableMapOf()
-                argsMap["id"] = currentListenerId
-                logger.print("test listener Id: $currentListenerId")
-                when (methodName) {
-                    "startDownloadTesting" -> {
-                        testDownloadSpeed(object : TestListener {
-                            override fun onComplete(transferRate: Double) {
-                                argsMap["transferRate"] = transferRate
-                                argsMap["type"] = ListenerEnum.COMPLETE.ordinal
-                                activity!!.runOnUiThread {
-                                    methodChannel.invokeMethod("callListener", argsMap)
-                                }
-                            }
+        val argsMap: MutableMap<String, Any> = mutableMapOf()
+        argsMap["id"] = currentListenerId
 
-                            override fun onError(speedTestError: String, errorMessage: String) {
-                                argsMap["speedTestError"] = speedTestError
-                                argsMap["errorMessage"] = errorMessage
-                                argsMap["type"] = ListenerEnum.ERROR.ordinal
-                                activity!!.runOnUiThread {
-                                    methodChannel.invokeMethod("callListener", argsMap)
-                                }
-                            }
+        // Remove any existing listener and cancellation flag
+        activeListeners.remove(currentListenerId)
+        val existingCancellationFlag = cancellationFlags[currentListenerId]
+        if (existingCancellationFlag != null) {
+        existingCancellationFlag.set(true)
+            cancellationFlags.remove(currentListenerId)
+        }
 
-                            override fun onProgress(percent: Double, transferRate: Double) {
-                                logger.print("onProgress $percent, $transferRate")
-                                argsMap["percent"] = percent
-                                argsMap["transferRate"] = transferRate
-                                argsMap["type"] = ListenerEnum.PROGRESS.ordinal
-                                activity!!.runOnUiThread {
-                                    methodChannel.invokeMethod("callListener", argsMap)
-                                }
-                            }
-                        }, testServer, fileSize)
+        logger.print("Test listener Id: $currentListenerId")
+        when (methodName) {
+            "startDownloadTesting" -> {
+                val speedTestSocket = SpeedTestSocket()
+                activeSockets[currentListenerId] = speedTestSocket
+
+                val listener = object : TestListener {
+                    override fun onComplete(transferRate: Double) {
+                        argsMap["transferRate"] = transferRate
+                        argsMap["type"] = ListenerEnum.COMPLETE.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                        // Remove listener and socket when done
+                        activeListeners.remove(currentListenerId)
+                        activeSockets.remove(currentListenerId)
                     }
-                    "startUploadTesting" -> {
-                        testUploadSpeed(object : TestListener {
-                            override fun onComplete(transferRate: Double) {
-                                argsMap["transferRate"] = transferRate
-                                argsMap["type"] = ListenerEnum.COMPLETE.ordinal
-                                activity!!.runOnUiThread {
-                                    methodChannel.invokeMethod("callListener", argsMap)
-                                }
-                            }
 
-                            override fun onError(speedTestError: String, errorMessage: String) {
-                                argsMap["speedTestError"] = speedTestError
-                                argsMap["errorMessage"] = errorMessage
-                                argsMap["type"] = ListenerEnum.ERROR.ordinal
-                                activity!!.runOnUiThread {
-                                    methodChannel.invokeMethod("callListener", argsMap)
-                                }
-                            }
+                    override fun onError(speedTestError: String, errorMessage: String) {
+                        argsMap["speedTestError"] = speedTestError
+                        argsMap["errorMessage"] = errorMessage
+                        argsMap["type"] = ListenerEnum.ERROR.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                        // Remove listener and socket when done
+                        activeListeners.remove(currentListenerId)
+                        activeSockets.remove(currentListenerId)
+                    }
 
-                            override fun onProgress(percent: Double, transferRate: Double) {
-                                argsMap["percent"] = percent
-                                argsMap["transferRate"] = transferRate
-                                argsMap["type"] = ListenerEnum.PROGRESS.ordinal
-                                activity!!.runOnUiThread {
-                                    methodChannel.invokeMethod("callListener", argsMap)
-                                }
-                            }
-                        }, testServer, fileSize)
+                    override fun onProgress(percent: Double, transferRate: Double) {
+                        logger.print("onProgress $percent, $transferRate")
+                        argsMap["percent"] = percent
+                        argsMap["transferRate"] = transferRate
+                        argsMap["type"] = ListenerEnum.PROGRESS.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                    }
+
+                    override fun onCancel() {
+                        argsMap["type"] = ListenerEnum.CANCEL.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
                     }
                 }
-                // Send some value to callback
+                activeListeners[currentListenerId] = listener
+                executorService.execute {
+                    testDownloadSpeed(speedTestSocket, listener, testServer, fileSize)
+                }
+            }
+            "startUploadTesting" -> {
+                val speedTestSocket = SpeedTestSocket()
+                activeSockets[currentListenerId] = speedTestSocket
+                val listener = object : TestListener {
+                    override fun onComplete(transferRate: Double) {
+                        argsMap["transferRate"] = transferRate
+                        argsMap["type"] = ListenerEnum.COMPLETE.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                        // Remove listener and socket when done
+                        activeListeners.remove(currentListenerId)
+                        activeSockets.remove(currentListenerId)
+                    }
 
+                    override fun onError(speedTestError: String, errorMessage: String) {
+                        argsMap["speedTestError"] = speedTestError
+                        argsMap["errorMessage"] = errorMessage
+                        argsMap["type"] = ListenerEnum.ERROR.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                        // Remove listener and socket when done
+                        activeListeners.remove(currentListenerId)
+                        activeSockets.remove(currentListenerId)
+                    }
+
+                    override fun onProgress(percent: Double, transferRate: Double) {
+                        logger.print("onProgress $percent, $transferRate")
+                        argsMap["percent"] = percent
+                        argsMap["transferRate"] = transferRate
+                        argsMap["type"] = ListenerEnum.PROGRESS.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                    }
+
+                    override fun onCancel() {
+                        argsMap["type"] = ListenerEnum.CANCEL.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                    }
+                }
+                activeListeners[currentListenerId] = listener
+                executorService.execute {
+                    testUploadSpeed(speedTestSocket, listener, testServer, fileSize)
+                }
+            }
+            "startLatencyTesting" -> {
+               val cancellationFlag = AtomicBoolean(false)
+               cancellationFlags[currentListenerId] = cancellationFlag
+
+                val listener = object : LatencyTestListener  {
+                     override fun onLatencyMeasured(percent: Double, latency: Double, jitter: Double) {
+                            argsMap["percent"] = percent
+                            argsMap["latency"] = latency
+                            argsMap["jitter"] = jitter
+                            argsMap["type"] = ListenerEnum.PROGRESS.ordinal
+                            activity?.runOnUiThread {
+                                methodChannel.invokeMethod("callListener", argsMap)
+                            }
+                        }
+
+                         override fun onComplete(averageLatency: Double, jitter: Double) {
+                            argsMap["latency"] = averageLatency
+                            argsMap["jitter"] = jitter
+                            argsMap["type"] = ListenerEnum.COMPLETE.ordinal
+                            activity?.runOnUiThread {
+                                methodChannel.invokeMethod("callListener", argsMap)
+                            }
+                            // Remove listener and cancellation flag when done
+                            activeListeners.remove(currentListenerId)
+                            cancellationFlags.remove(currentListenerId)
+                        }
+                        override fun onError(errorMessage: String) {
+                            argsMap["errorMessage"] = errorMessage
+                            argsMap["type"] = ListenerEnum.ERROR.ordinal
+                            activity?.runOnUiThread {
+                                methodChannel.invokeMethod("callListener", argsMap)
+                            }
+                            // Remove listener and cancellation flag when done
+                            activeListeners.remove(currentListenerId)
+                            cancellationFlags.remove(currentListenerId)
+                        }
+
+                    override fun onCancel() {
+                        argsMap["type"] = ListenerEnum.CANCEL.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
+                        }
+                        // Remove listener and cancellation flag when cancelled
+                        activeListeners.remove(currentListenerId)
+                        cancellationFlags.remove(currentListenerId)
+                    }
+                }
+                activeListeners[currentListenerId] = listener
+                 executorService.execute {
+                        testLatency(testServer, listener, cancellationFlag)
+                    }
             }
         }
-        val thread = Thread(runnable)
-        callbackById[currentListenerId] = runnable
-        thread.start()
-        // Return immediately
         result.success(null)
     }
 
-    private fun testUploadSpeed(testListener: TestListener, testServer: String, fileSize: Int) {
-        // add a listener to wait for speedtest completion and progress
-        logger.print("Testing Testing")
+    private fun testLatency(testServer: String, testListener: LatencyTestListener, cancellationFlag: AtomicBoolean) {
+            val latencyMeasurements = mutableListOf<Long>()
+            val serverUrl = URL(testServer)
+            val serverHost = serverUrl.host
+            val serverPort = if (serverUrl.port != -1) serverUrl.port else serverUrl.defaultPort
+
+            val totalPings = 100 // Total number of pings
+            var currentPing = 0
+
+            while (!cancellationFlag.get() && currentPing < totalPings) {
+            try {
+                val startTime = System.currentTimeMillis()
+                val socket = Socket()
+                val socketAddress = InetSocketAddress(serverHost, serverPort)
+                socket.connect(socketAddress, 5000) // 5 seconds timeout
+                val endTime = System.currentTimeMillis()
+                val latency = endTime - startTime
+                latencyMeasurements.add(latency)
+                socket.close()
+
+                currentPing++
+                val percent = (currentPing.toDouble() / totalPings) * 100.0
+                val jitter = calculateJitterFromLatencies(latencyMeasurements)
+                
+                testListener.onLatencyMeasured(percent, latency.toDouble(), jitter)
+                
+                Thread.sleep(100) // Sleep 100ms between pings
+            } catch (e: Exception) {
+                e.printStackTrace()
+                testListener.onError(e.message ?: "Unknown error")
+                break
+                }
+            }   
+            if (latencyMeasurements.isNotEmpty()) {
+                val averageLatency = latencyMeasurements.average()
+                val jitter = calculateJitterFromLatencies(latencyMeasurements)
+                testListener.onComplete(averageLatency, jitter)
+            }
+        
+    }
+
+    private fun calculateJitterFromLatencies(latencyMeasurements: List<Long>): Double {
+        if (latencyMeasurements.size < 2) {
+            return 0.0
+        }
+        val jitters = latencyMeasurements.zipWithNext { a, b -> kotlin.math.abs(b - a) }
+        return jitters.average()
+    }
+
+    private fun testUploadSpeed(speedTestSocket: SpeedTestSocket, testListener: TestListener, testServer: String, fileSize: Int) {
         speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
             override fun onCompletion(report: SpeedTestReport) {
-//                // called when download/upload is complete
-//                logger.print("[COMPLETED] rate in octet/s : " + report.transferRateOctet)
-//                logger.print("[COMPLETED] rate in bit/s   : " + report.transferRateBit)
-//                testListener.onComplete(report.transferRateBit.toDouble())
+                // Do nothing here
             }
 
             override fun onError(speedTestError: SpeedTestError, errorMessage: String) {
-                // called when a download/upload error occur
                 logger.print("OnError: ${speedTestError.name}, $errorMessage")
                 testListener.onError(errorMessage, speedTestError.name)
             }
 
             override fun onProgress(percent: Float, report: SpeedTestReport) {
-//                // called to notify download/upload progress
-//                logger.print("[PROGRESS] progress : $percent%")
-//                logger.print("[PROGRESS] rate in octet/s : " + report.transferRateOctet)
-//                logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
-//                testListener.onProgress(percent.toDouble(), report.transferRateBit.toDouble())
+                // Do nothing here
             }
         })
-//        speedTestSocket.startFixedUpload(testServer, 10000000, 20000, 100)
-        speedTestSocket.startUploadRepeat(testServer,
+        speedTestSocket.startUploadRepeat(
+            testServer,
             defaultTestTimeoutInMillis,
             defaultResponseDelayInMillis,
             fileSize,
             object : IRepeatListener {
                 override fun onCompletion(report: SpeedTestReport) {
-                    // called when download/upload is complete
-                    logger.print("[COMPLETED] rate in octet/s : " + report.transferRateOctet)
                     logger.print("[COMPLETED] rate in bit/s   : " + report.transferRateBit)
                     testListener.onComplete(report.transferRateBit.toDouble())
                 }
 
                 override fun onReport(report: SpeedTestReport) {
-                    // called to notify download/upload progress
                     logger.print("[PROGRESS] progress : ${report.progressPercent}%")
-                    logger.print("[PROGRESS] rate in octet/s : " + report.transferRateOctet)
                     logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
-                    testListener.onProgress(report.progressPercent.toDouble(),
-                        report.transferRateBit.toDouble())
+                    testListener.onProgress(report.progressPercent.toDouble(), report.transferRateBit.toDouble())
                 }
             })
         logger.print("After Testing")
     }
 
-    private fun testDownloadSpeed(testListener: TestListener, testServer: String, fileSize: Int) {
-        // add a listener to wait for speedtest completion and progress
-        logger.print("Testing Testing")
+    private fun testDownloadSpeed( speedTestSocket: SpeedTestSocket, testListener: TestListener, testServer: String, fileSize: Int) {
+
         speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
             override fun onCompletion(report: SpeedTestReport) {
-//                // called when download/upload is complete
-//                logger.print("[COMPLETED] rate in octet/s : " + report.transferRateOctet)
-//                logger.print("[COMPLETED] rate in bit/s   : " + report.transferRateBit)
-//                testListener.onComplete(report.transferRateBit.toDouble())
+                // Do nothing here
             }
 
             override fun onError(speedTestError: SpeedTestError, errorMessage: String) {
-                // called when a download/upload error occur
                 logger.print("OnError: ${speedTestError.name}, $errorMessage")
                 testListener.onError(errorMessage, speedTestError.name)
             }
 
             override fun onProgress(percent: Float, report: SpeedTestReport) {
-//                // called to notify download/upload progress
-//                logger.print("[PROGRESS] progress : $percent%")
-//                logger.print("[PROGRESS] rate in octet/s : " + report.transferRateOctet)
-//                logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
-//                testListener.onProgress(percent.toDouble(), report.transferRateBit.toDouble())
+                // Do nothing here
             }
         })
-//        speedTestSocket.startFixedDownload(testServer, 20000, 100)
-
-        speedTestSocket.startDownloadRepeat(testServer,
+        speedTestSocket.startDownloadRepeat(
+            testServer,
             defaultTestTimeoutInMillis,
             defaultResponseDelayInMillis,
             object : IRepeatListener {
                 override fun onCompletion(report: SpeedTestReport) {
-                    // called when download/upload is complete
-                    logger.print("[COMPLETED] rate in octet/s : " + report.transferRateOctet)
                     logger.print("[COMPLETED] rate in bit/s   : " + report.transferRateBit)
                     testListener.onComplete(report.transferRateBit.toDouble())
                 }
 
                 override fun onReport(report: SpeedTestReport) {
-                    // called to notify download/upload progress
                     logger.print("[PROGRESS] progress : ${report.progressPercent}%")
-                    logger.print("[PROGRESS] rate in octet/s : " + report.transferRateOctet)
                     logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
-                    testListener.onProgress(report.progressPercent.toDouble(),
-                        report.transferRateBit.toDouble())
+                    testListener.onProgress(report.progressPercent.toDouble(), report.transferRateBit.toDouble())
                 }
             })
-
         logger.print("After Testing")
     }
 
     private fun cancelListening(args: Any, result: Result) {
-        // Get callback id
         val currentListenerId = args as Int
-        // Remove callback
-        callbackById.remove(currentListenerId)
-        // Do additional stuff if required to cancel the listener
+        activeListeners.remove(currentListenerId)
+        val cancellationFlag = cancellationFlags[currentListenerId]
+        if (cancellationFlag != null) {
+            cancellationFlag.set(true)
+            cancellationFlags.remove(currentListenerId)
+        }
         result.success(null)
     }
 
     private fun cancelTasks(arguments: Any?, result: Result) {
         Thread(Runnable {
             arguments?.let { args ->
-                val argsMap = args as Map<*, *>
+                val idsToCancel = args as List<Int>
                 try {
-                    if (speedTestSocket.speedTestMode != SpeedTestMode.NONE) {
-                        speedTestSocket.forceStopTask()
-                        result.success(true)
-
-                        if (argsMap.containsKey("id1")) {
-                            val id1 = argsMap["id1"] as Int
-                            val map: MutableMap<String, Any> = mutableMapOf()
-                            map["id"] = id1
-                            map["type"] = ListenerEnum.CANCEL.ordinal
-                            activity!!.runOnUiThread {
-                                methodChannel.invokeMethod("callListener", map)
-                            }
+                    idsToCancel.forEach { id ->
+                        val socket = activeSockets[id]
+                        if (socket != null && socket.speedTestMode != SpeedTestMode.NONE) {
+                            socket.forceStopTask()
+                            activeSockets.remove(id)
                         }
-                        if (argsMap.containsKey("id2")) {
-                            val id2 = argsMap["id2"] as Int
-                            val map: MutableMap<String, Any> = mutableMapOf()
-                            map["id"] = id2
-                            map["type"] = ListenerEnum.CANCEL.ordinal
-                            activity!!.runOnUiThread {
-                                methodChannel.invokeMethod("callListener", map)
-                            }
+                        val cancellationFlag = cancellationFlags[id]
+                        if (cancellationFlag != null) {
+                            cancellationFlag.set(true)
+                            cancellationFlags.remove(id)
                         }
-
-                        speedTestSocket.clearListeners()
-                        speedTestSocket = SpeedTestSocket()
-                        return@Runnable
+                        val listener = activeListeners[id]
+                        if (listener != null) {
+                            when (listener) {
+                                is TestListener -> listener.onCancel()
+                                is LatencyTestListener -> listener.onCancel()
+                            }
+                            activeListeners.remove(id)
+                        }
                     }
+                    result.success(true)
                 } catch (e: Exception) {
                     e.localizedMessage?.let { logger.print(it) }
+                    result.success(false)
                 }
-                result.success(false)
-            } ?: kotlin.run {
+            } ?: run {
                 result.success(false)
             }
         }).start()
     }
 }
+
 

@@ -5,8 +5,8 @@ class Location {
   Location({this.city, this.country});
 
   Location.fromJson(Map<String, dynamic> json) {
-    city = json['city'];
-    country = json['country'];
+    city = json['city'] as String?;
+    country = json['country'] as String?;
   }
 
   Map<String, dynamic> toJson() {

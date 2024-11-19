@@ -17,6 +17,10 @@ abstract class ISpeedtest {
   void on(String event, Function callback);
   void onUpdate(Function callback);
   void onEnd(Function callback);
+  void onLatencyUpdate(Function callback);
+  void onEndLatency(Function callback);
+  void startPingTest();
+  void startContinuousPingTest();
 }
 
 class JsSpeedtest implements ISpeedtest {
@@ -27,6 +31,11 @@ class JsSpeedtest implements ISpeedtest {
   @override
   void setParameter(String key, dynamic value) {
     _jsObject.callMethod('setParameter', [key, value]);
+  }
+
+  @override
+  void startContinuousPingTest() {
+    _jsObject.callMethod('startContinuousPingTest');
   }
 
   @override
@@ -102,5 +111,17 @@ class JsSpeedtest implements ISpeedtest {
   @override
   void onEnd(Function callback) {
     _jsObject['onend'] = allowInterop(callback);
+  }
+
+  void onLatencyUpdate(Function callback) {
+    _jsObject['onlatencyupdate'] = allowInterop(callback);
+  }
+
+  void onEndLatency(Function callback) {
+    _jsObject['onendlatency'] = allowInterop(callback);
+  }
+
+  void startPingTest() {
+    _jsObject.callMethod('startPingTest');
   }
 }

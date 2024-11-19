@@ -27,19 +27,19 @@ String? testId; // Test ID (sent back by telemetry if used, null otherwise)
 String log = ""; // Telemetry log
 
 void tlog(String s) {
-  if (settings['telemetry_level'] >= 2) {
+  if ((settings['telemetry_level'] as int) >= 2) {
     log += "${DateTime.now().millisecondsSinceEpoch}: $s\n";
   }
 }
 
 void tverb(String s) {
-  if (settings['telemetry_level'] >= 3) {
+  if ((settings['telemetry_level'] as int) >= 3) {
     log += "${DateTime.now().millisecondsSinceEpoch}: $s\n";
   }
 }
 
 void twarn(String s) {
-  if (settings['telemetry_level'] >= 2) {
+  if ((settings['telemetry_level'] as int) >= 2) {
     log += "${DateTime.now().millisecondsSinceEpoch} WARN: $s\n";
   }
   print("WARN: $s");
@@ -112,7 +112,7 @@ void main() {
   DedicatedWorkerGlobalScope self = DedicatedWorkerGlobalScope.instance;
 
   self.onMessage.listen((MessageEvent e) {
-    String data = e.data;
+    String data = e.data as String;
     List<String> params = data.split(" ");
 
     if (params[0] == "status") {
@@ -139,7 +139,7 @@ void main() {
         Map<String, dynamic> s = {};
         try {
           String ss = data.substring(5);
-          if (ss.isNotEmpty) s = jsonDecode(ss);
+          if (ss.isNotEmpty) s = jsonDecode(ss) as Map<String, dynamic>;
         } catch (e) {
           twarn("Error parsing custom settings JSON. Please check your syntax");
         }
@@ -156,8 +156,9 @@ void main() {
         String ua = window.navigator.userAgent;
 
         // Quirks for specific browsers
-        if (settings['enable_quirks'] ||
-            (s.containsKey('enable_quirks') && s['enable_quirks'])) {
+        if ((settings['enable_quirks'] as bool) ||
+            ((s.containsKey('enable_quirks') &&
+                (s['enable_quirks'] as bool)))) {
           if (RegExp(r'Firefox.(\d+\.\d+)', caseSensitive: false)
               .hasMatch(ua)) {
             if (!s.containsKey('ping_allowPerformanceApi')) {
@@ -235,7 +236,7 @@ void main() {
         if (testState == 5) return;
         if (test_pointer >= (settings['test_order'] as String).length) {
           // Test is finished
-          if (settings['telemetry_level'] > 0) {
+          if ((settings['telemetry_level'] as int) > 0) {
             sendTelemetry((id) {
               testState = 4;
               if (id != null) testId = id;
@@ -312,7 +313,7 @@ void main() {
       tlog("manually aborted");
       clearRequests(); // Stop all HTTP activity
       if (interval != null) interval!.cancel(); // Clear timer if present
-      if (settings['telemetry_level'] > 1) sendTelemetry((_) {});
+      if ((settings['telemetry_level'] as int) > 1) sendTelemetry((_) {});
       testState = 5; // Set test as aborted
       dlStatus = "";
       ulStatus = "";
@@ -364,7 +365,7 @@ void getIp(void Function() done) {
         "IP: ${x.responseText}, took ${DateTime.now().millisecondsSinceEpoch - startT}ms");
     try {
       var data = jsonDecode(x.responseText!);
-      clientIp = data['processedString'];
+      clientIp = data['processedString'] as String;
       ispInfo = data['rawIspInfo'];
     } catch (e) {
       clientIp = x.responseText!;
@@ -379,13 +380,8 @@ void getIp(void Function() done) {
     done();
   });
 
-  String url = settings['url_getIp'] +
-      url_sep(settings['url_getIp']) +
-      (settings['mpot'] ? "cors=true&" : "") +
-      (settings['getIp_ispInfo']
-          ? "isp=true${settings['getIp_ispInfo_distance'] != null ? "&distance=${settings['getIp_ispInfo_distance']}" : ""}&"
-          : "&") +
-      "r=${Random().nextDouble()}";
+  String url =
+      "${settings['url_getIp'] as String}${url_sep(settings['url_getIp'] as String)}${settings['mpot'] as bool ? "cors=true&" : ""}${(settings['getIp_ispInfo'] as bool) ? "isp=true${settings['getIp_ispInfo_distance'] != null ? "&distance=${settings['getIp_ispInfo_distance']}" : ""}&" : "&"}r=${Random().nextDouble()}";
 
   x.open('GET', url, async: true);
   x.send();
@@ -453,16 +449,14 @@ void dlTest(void Function() done) {
 
       // Send HTTP request
       try {
-        if (settings['xhr_dlUseBlob'])
+        if ((settings['xhr_dlUseBlob'] as bool))
           x.responseType = 'blob';
         else
           x.responseType = 'arraybuffer';
       } catch (e) {}
 
-      String url = settings['url_dl'] +
-          url_sep(settings['url_dl']) +
-          (settings['mpot'] ? "cors=true&" : "") +
-          "r=${Random().nextDouble()}&ckSize=${settings['garbagePhp_chunkSize']}";
+      String url =
+          "${settings['url_dl'] as String}${url_sep(settings['url_dl'] as String)}${settings['mpot'] as bool ? "cors=true&" : ""}r=${Random().nextDouble()}&ckSize=${settings['garbagePhp_chunkSize']}";
 
       x.open('GET', url, async: true);
       x.send();
@@ -470,19 +464,23 @@ void dlTest(void Function() done) {
   }
 
   // Open streams
-  for (int i = 0; i < settings['xhr_dlMultistream']; i++) {
-    testStream(i, settings['xhr_multistreamDelay'] * i);
+  for (int i = 0; i < (settings['xhr_dlMultistream'] as int); i++) {
+    testStream(i, (settings['xhr_multistreamDelay'] as int) * i);
   }
 
   // Every 200ms, update dlStatus
   interval = Timer.periodic(Duration(milliseconds: 200), (timer) {
     tverb("DL: $dlStatus${graceTimeDone ? "" : " (in grace time)"}");
     int t = DateTime.now().millisecondsSinceEpoch - startT;
-    if (graceTimeDone)
-      dlProgress = (t + bonusT) / (settings['time_dl_max'] * 1000);
-    if (t < 200) return;
+    if (graceTimeDone) {
+      dlProgress =
+          ((t + bonusT) / ((settings['time_dl_max'] as int) * 1000)).toDouble();
+    }
+    if (t < 200) {
+      return;
+    }
     if (!graceTimeDone) {
-      if (t > 1000 * settings['time_dlGraceTime']) {
+      if (t > 1000 * (settings['time_dlGraceTime'] as int)) {
         if (totLoaded > 0) {
           // If the connection is so slow that we didn't get a single chunk yet, do not reset
           startT = DateTime.now().millisecondsSinceEpoch;
@@ -493,16 +491,18 @@ void dlTest(void Function() done) {
       }
     } else {
       double speed = totLoaded / (t / 1000.0);
-      if (settings['time_auto']) {
+      if ((settings['time_auto'] as bool)) {
         // Decide how much to shorten the test
         double bonus = (5.0 * speed) / 100000;
         bonusT += bonus > 400 ? 400 : bonus;
       }
       // Update status
-      dlStatus = ((speed * 8 * settings['overheadCompensationFactor']) /
-              (settings['useMebibits'] ? 1048576 : 1000000))
-          .toStringAsFixed(2);
-      if ((t + bonusT) / 1000.0 > settings['time_dl_max'] || failed) {
+      dlStatus =
+          ((speed * 8 * (settings['overheadCompensationFactor'] as num)) /
+                  (settings['useMebibits'] as bool ? 1048576 : 1000000))
+              .toStringAsFixed(2);
+      if (((t + bonusT) / 1000.0) > (settings['time_dl_max'] as int) ||
+          failed) {
         // Test is over, stop streams and timer
         if (failed || dlStatus == 'NaN') dlStatus = "Fail";
         clearRequests();
@@ -532,7 +532,7 @@ void ulTest(void Function() done) {
     r[i] = Random().nextInt(maxInt);
   }
 
-  for (var i = 0; i < settings['xhr_ul_blob_megabytes']; i++) {
+  for (var i = 0; i < (settings['xhr_ul_blob_megabytes'] as int); i++) {
     req.add(r);
   }
 
@@ -565,7 +565,7 @@ void ulTest(void Function() done) {
         HttpRequest x = HttpRequest();
         xhr!.add(x);
 
-        bool ie11workaround = settings['forceIE11Workaround'];
+        bool ie11workaround = (settings['forceIE11Workaround'] as bool);
         if (!ie11workaround) {
           try {
             x.upload.onProgress.listen((_) {});
@@ -583,16 +583,14 @@ void ulTest(void Function() done) {
             testStream(i, 0);
           });
 
-          x.open(
-              "POST",
-              settings['url_ul'] +
-                  url_sep(settings['url_ul']) +
-                  (settings['mpot'] ? "cors=true&" : "") +
-                  "r=${Random().nextDouble()}",
+          x.open("POST",
+              "${settings['url_ul'] as String}${url_sep(settings['url_ul'] as String)}${settings['mpot'] as bool ? "cors=true&" : ""}r=${Random().nextDouble()}",
               async: true);
           try {
             x.setRequestHeader("Content-Encoding", "identity");
-          } catch (e) {}
+          } catch (e) {
+            // ignore
+          }
           x.send(reqSmallBlob);
         } else {
           // Regular version
@@ -601,7 +599,9 @@ void ulTest(void Function() done) {
             if (testState != 3) {
               try {
                 x.abort();
-              } catch (e) {}
+              } catch (e) {
+                // ignore
+              }
             }
             // Progress event, add number of new loaded bytes to totLoaded
             double loadDiff =
@@ -622,31 +622,32 @@ void ulTest(void Function() done) {
             if (settings['xhr_ignoreErrors'] == 0) failed = true; // Abort
             try {
               x.abort();
-            } catch (e) {}
+            } catch (e) {
+              // ignore
+            }
             xhr!.remove(x);
-            if (settings['xhr_ignoreErrors'] == 1)
+            if ((settings['xhr_ignoreErrors'] as int) == 1) {
               testStream(i, 0); // Restart stream
+            }
           });
 
           // Send HTTP request
-          x.open(
-              "POST",
-              settings['url_ul'] +
-                  url_sep(settings['url_ul']) +
-                  (settings['mpot'] ? "cors=true&" : "") +
-                  "r=${Random().nextDouble()}",
+          x.open("POST",
+              "${settings['url_ul'] as String}${url_sep(settings['url_ul'] as String)}${settings['mpot'] as bool ? "cors=true&" : ""}r=${Random().nextDouble()}",
               async: true);
           try {
             x.setRequestHeader("Content-Encoding", "identity");
-          } catch (e) {}
+          } catch (e) {
+            // ignore
+          }
           x.send(reqBlob);
         }
       });
     }
 
     // Open streams
-    for (int i = 0; i < settings['xhr_ulMultistream']; i++) {
-      testStream(i, settings['xhr_multistreamDelay'] * i);
+    for (int i = 0; i < (settings['xhr_ulMultistream'] as int); i++) {
+      testStream(i, (settings['xhr_multistreamDelay'] as int) * i);
     }
 
     // Every 200ms, update ulStatus
@@ -654,10 +655,11 @@ void ulTest(void Function() done) {
       tverb("UL: $ulStatus${graceTimeDone ? "" : " (in grace time)"}");
       int t = DateTime.now().millisecondsSinceEpoch - startT;
       if (graceTimeDone)
-        ulProgress = (t + bonusT) / (settings['time_ul_max'] * 1000);
+        ulProgress = ((t + bonusT) / ((settings['time_ul_max'] as int) * 1000))
+            .toDouble();
       if (t < 200) return;
       if (!graceTimeDone) {
-        if (t > 1000 * settings['time_ulGraceTime']) {
+        if (t > 1000 * (settings['time_ulGraceTime'] as int)) {
           if (totLoaded > 0) {
             // If the connection is so slow that we didn't get a single chunk yet, do not reset
             startT = DateTime.now().millisecondsSinceEpoch;
@@ -668,16 +670,18 @@ void ulTest(void Function() done) {
         }
       } else {
         double speed = totLoaded / (t / 1000.0);
-        if (settings['time_auto']) {
+        if ((settings['time_auto'] as bool)) {
           // Decide how much to shorten the test
           double bonus = (5.0 * speed) / 100000;
           bonusT += bonus > 400 ? 400 : bonus;
         }
         // Update status
-        ulStatus = ((speed * 8 * settings['overheadCompensationFactor']) /
-                (settings['useMebibits'] ? 1048576 : 1000000))
-            .toStringAsFixed(2);
-        if ((t + bonusT) / 1000.0 > settings['time_ul_max'] || failed) {
+        ulStatus =
+            ((speed * 8 * (settings['overheadCompensationFactor'] as num)) /
+                    (settings['useMebibits'] as bool ? 1048576 : 1000000))
+                .toStringAsFixed(2);
+        if (((t + bonusT) / 1000.0) > (settings['time_ul_max'] as int) ||
+            failed) {
           // Test is over, stop streams and timer
           if (failed || ulStatus == 'NaN') ulStatus = "Fail";
           clearRequests();
@@ -691,7 +695,7 @@ void ulTest(void Function() done) {
     });
   }
 
-  if (settings['mpot']) {
+  if ((settings['mpot'] as bool)) {
     tverb("Sending POST request before performing upload test");
     xhr = [];
     HttpRequest x = HttpRequest();
@@ -706,7 +710,7 @@ void ulTest(void Function() done) {
       testFunction();
     });
 
-    x.open("POST", settings['url_ul']);
+    x.open("POST", settings['url_ul'] as String);
     x.send();
   } else {
     testFunction();
@@ -731,7 +735,7 @@ void pingTest(void Function() done) {
   // Ping function
   void doPing() {
     tverb("ping");
-    pingProgress = i / settings['count_ping'];
+    pingProgress = (i / (settings['count_ping'] as int)).toDouble();
     prevT = DateTime.now().millisecondsSinceEpoch;
     HttpRequest x = HttpRequest();
     xhr!.add(x);
@@ -743,7 +747,7 @@ void pingTest(void Function() done) {
         prevT = DateTime.now().millisecondsSinceEpoch; // First pong
       } else {
         int instspd = DateTime.now().millisecondsSinceEpoch - prevT!;
-        if (settings['ping_allowPerformanceApi']) {
+        if ((settings['ping_allowPerformanceApi'] as bool)) {
           // Attempt to get accurate timing using Performance API
           try {
             var entries = window.performance.getEntries();
@@ -752,7 +756,7 @@ void pingTest(void Function() done) {
               if (p is PerformanceResourceTiming) {
                 double d =
                     ((p.responseStart ?? 0) - (p.requestStart ?? 0)).toDouble();
-                if (d <= 0) d = (p.duration ?? 0).toDouble();
+                if (d <= 0) d = (p.duration).toDouble();
                 if (d > 0 && d < instspd) instspd = d.toInt();
               }
             }
@@ -783,7 +787,7 @@ void pingTest(void Function() done) {
       jitterStatus = jitter.toStringAsFixed(2);
       i++;
       tverb("ping: $pingStatus jitter: $jitterStatus");
-      if (i < settings['count_ping']) {
+      if (i < (settings['count_ping'] as int)) {
         doPing();
       } else {
         pingProgress = 1;
@@ -812,7 +816,7 @@ void pingTest(void Function() done) {
       if (settings['xhr_ignoreErrors'] == 2) {
         // Ignore failed ping
         i++;
-        if (i < settings['count_ping']) {
+        if (i < (settings['count_ping'] as int)) {
           doPing();
         } else {
           pingProgress = 1;
@@ -824,12 +828,8 @@ void pingTest(void Function() done) {
     });
 
     // Send HTTP request
-    x.open(
-        "GET",
-        settings['url_ping'] +
-            url_sep(settings['url_ping']) +
-            (settings['mpot'] ? "cors=true&" : "") +
-            "r=${Random().nextDouble()}",
+    x.open("GET",
+        "${settings['url_ping'] as String}${url_sep(settings['url_ping'] as String)}${settings['mpot'] as bool ? "cors=true&" : ""}r=${Random().nextDouble()}",
         async: true);
     x.send();
   }
@@ -839,7 +839,7 @@ void pingTest(void Function() done) {
 
 // Telemetry
 void sendTelemetry(void Function(String?) done) {
-  if (settings['telemetry_level'] < 1) return;
+  if ((settings['telemetry_level'] as int) < 1) return;
   HttpRequest x = HttpRequest();
 
   x.onLoad.listen((_) {
@@ -865,12 +865,8 @@ void sendTelemetry(void Function(String?) done) {
     done(null);
   });
 
-  x.open(
-      "POST",
-      settings['url_telemetry'] +
-          url_sep(settings['url_telemetry']) +
-          (settings['mpot'] ? "cors=true&" : "") +
-          "r=${Random().nextDouble()}",
+  x.open("POST",
+      "${settings['url_telemetry'] as String}${url_sep(settings['url_telemetry'] as String)}${settings['mpot'] as bool ? "cors=true&" : ""}r=${Random().nextDouble()}",
       async: true);
 
   Map<String, dynamic> telemetryIspInfo = {
@@ -885,12 +881,12 @@ void sendTelemetry(void Function(String?) done) {
     fd.append("ul", ulStatus);
     fd.append("ping", pingStatus);
     fd.append("jitter", jitterStatus);
-    fd.append("log", settings['telemetry_level'] > 1 ? log : "");
-    fd.append("extra", settings['telemetry_extra']);
+    fd.append("log", (settings['telemetry_level'] as int) > 1 ? log : "");
+    fd.append("extra", settings['telemetry_extra'] as String);
     x.send(fd);
   } catch (ex) {
     String postData =
-        "extra=${Uri.encodeComponent(settings['telemetry_extra'])}&ispinfo=${Uri.encodeComponent(jsonEncode(telemetryIspInfo))}&dl=${Uri.encodeComponent(dlStatus)}&ul=${Uri.encodeComponent(ulStatus)}&ping=${Uri.encodeComponent(pingStatus)}&jitter=${Uri.encodeComponent(jitterStatus)}&log=${Uri.encodeComponent(settings['telemetry_level'] > 1 ? log : "")}";
+        "extra=${Uri.encodeComponent(settings['telemetry_extra'] as String)}&ispinfo=${Uri.encodeComponent(jsonEncode(telemetryIspInfo))}&dl=${Uri.encodeComponent(dlStatus)}&ul=${Uri.encodeComponent(ulStatus)}&ping=${Uri.encodeComponent(pingStatus)}&jitter=${Uri.encodeComponent(jitterStatus)}&log=${Uri.encodeComponent((settings['telemetry_level'] as int) > 1 ? log : "")}";
     x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
     x.send(postData);
   }
