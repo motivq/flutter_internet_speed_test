@@ -20,6 +20,7 @@ abstract class ISpeedtest {
   void onLatencyUpdate(Function callback);
   void onEndLatency(Function callback);
   void startPingTest();
+  void startContinuousPingTest();
 }
 
 class JsSpeedtest implements ISpeedtest {
@@ -30,6 +31,11 @@ class JsSpeedtest implements ISpeedtest {
   @override
   void setParameter(String key, dynamic value) {
     _jsObject.callMethod('setParameter', [key, value]);
+  }
+
+  @override
+  void startContinuousPingTest() {
+    _jsObject.callMethod('startContinuousPingTest');
   }
 
   @override

@@ -51,8 +51,6 @@ class MethodChannelFlutterInternetSpeedTest
             'TestFairy: Ignoring invoke from native. This normally shouldn\'t happen.');
       }
     }
-
-    await methodChannel.invokeMethod("cancelListening", call.arguments["id"]);
   }
 
   void _handleLatencyTesting(int type, Map<dynamic, dynamic> args) {
@@ -74,6 +72,7 @@ class MethodChannelFlutterInternetSpeedTest
               .d('onLatencyComplete: latency=$averageLatency, jitter=$jitter');
         }
         callbacks.item3(averageLatency, jitter);
+        methodChannel.invokeMethod("cancelListening", args["id"]);
         latencyCallbacksById.remove(idStr);
         break;
       case ListenerEnum.error:
@@ -82,21 +81,25 @@ class MethodChannelFlutterInternetSpeedTest
           _logger.d('onLatencyError: $errorMessage');
         }
         callbacks.item1(errorMessage, '');
+        methodChannel.invokeMethod("cancelListening", args["id"]);
         latencyCallbacksById.remove(idStr);
         break;
       case ListenerEnum.progress:
+        final percent = args['percent'] as double;
         final latency = args['latency'] as double;
+        final jitter = args['jitter'] as double;
         if (isLogEnabled) {
-          _logger.d('onLatencyProgress: latency=$latency');
+          _logger.d(
+              'onLatencyProgress: latency=$latency, percent=$percent, jitter=$jitter');
         }
-        callbacks.item2(
-            args['percent'] as double, latency, args['jitter'] as double);
+        callbacks.item2(percent, latency, jitter);
         break;
       case ListenerEnum.cancel:
         if (isLogEnabled) {
           _logger.d('onLatencyCancel');
         }
         callbacks.item4();
+        methodChannel.invokeMethod("cancelListening", args["id"]);
         latencyCallbacksById.remove(idStr);
         break;
     }
@@ -148,6 +151,7 @@ class MethodChannelFlutterInternetSpeedTest
     callbacksById[args["id"].toString()]!.item3(average, SpeedUnit.mbps);
     downloadSteps = 0;
     downloadRate = 0;
+    methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
@@ -160,6 +164,7 @@ class MethodChannelFlutterInternetSpeedTest
         args['errorMessage'] as String, args['speedTestError'] as String);
     downloadSteps = 0;
     downloadRate = 0;
+    methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
@@ -184,6 +189,7 @@ class MethodChannelFlutterInternetSpeedTest
     callbacksById[args["id"].toString()]!.item4();
     downloadSteps = 0;
     downloadRate = 0;
+    methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
@@ -202,6 +208,7 @@ class MethodChannelFlutterInternetSpeedTest
     callbacksById[args["id"].toString()]!.item3(average, SpeedUnit.mbps);
     uploadSteps = 0;
     uploadRate = 0;
+    methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
@@ -212,6 +219,8 @@ class MethodChannelFlutterInternetSpeedTest
     }
     callbacksById[args["id"].toString()]!.item1(
         args['errorMessage'] as String, args['speedTestError'] as String);
+    methodChannel.invokeMethod("cancelListening", args["id"]);
+    callbacksById.remove(args["id"].toString());
   }
 
   void _onUploadProgress(Map<dynamic, dynamic> args) {
@@ -233,6 +242,7 @@ class MethodChannelFlutterInternetSpeedTest
     callbacksById[args["id"].toString()]!.item4();
     downloadSteps = 0;
     downloadRate = 0;
+    methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
@@ -446,6 +456,7 @@ class MethodChannelFlutterInternetSpeedTest
 
     // Clear callbacks
     callbacksById.clear();
+    latencyCallbacksById.clear();
 
     // Reset download/upload state
     downloadSteps = 0;

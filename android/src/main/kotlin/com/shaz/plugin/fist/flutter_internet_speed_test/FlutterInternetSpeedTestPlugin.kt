@@ -127,6 +127,14 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         val argsMap: MutableMap<String, Any> = mutableMapOf()
         argsMap["id"] = currentListenerId
 
+        // Remove any existing listener and cancellation flag
+        activeListeners.remove(currentListenerId)
+        val existingCancellationFlag = cancellationFlags[currentListenerId]
+        if (existingCancellationFlag != null) {
+        existingCancellationFlag.set(true)
+            cancellationFlags.remove(currentListenerId)
+        }
+
         logger.print("Test listener Id: $currentListenerId")
         when (methodName) {
             "startDownloadTesting" -> {
@@ -233,7 +241,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                cancellationFlags[currentListenerId] = cancellationFlag
 
                 val listener = object : LatencyTestListener  {
-                     override fun onLatencyMeasured(percent: Double, latency: Long, jitter: Double) {
+                     override fun onLatencyMeasured(percent: Double, latency: Double, jitter: Double) {
                             argsMap["percent"] = percent
                             argsMap["latency"] = latency
                             argsMap["jitter"] = jitter
@@ -285,37 +293,38 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
     }
 
     private fun testLatency(testServer: String, testListener: LatencyTestListener, cancellationFlag: AtomicBoolean) {
-            val numPings = 10
             val latencyMeasurements = mutableListOf<Long>()
             val serverUrl = URL(testServer)
             val serverHost = serverUrl.host
             val serverPort = if (serverUrl.port != -1) serverUrl.port else serverUrl.defaultPort
 
-            for (i in 1..numPings) {
-                 if (cancellationFlag.get()) {
-                    // Test was cancelled
-                    testListener.onCancel()
-                    return
+            val totalPings = 100 // Total number of pings
+            var currentPing = 0
+
+            while (!cancellationFlag.get() && currentPing < totalPings) {
+            try {
+                val startTime = System.currentTimeMillis()
+                val socket = Socket()
+                val socketAddress = InetSocketAddress(serverHost, serverPort)
+                socket.connect(socketAddress, 5000) // 5 seconds timeout
+                val endTime = System.currentTimeMillis()
+                val latency = endTime - startTime
+                latencyMeasurements.add(latency)
+                socket.close()
+
+                currentPing++
+                val percent = (currentPing.toDouble() / totalPings) * 100.0
+                val jitter = calculateJitterFromLatencies(latencyMeasurements)
+                
+                testListener.onLatencyMeasured(percent, latency.toDouble(), jitter)
+                
+                Thread.sleep(100) // Sleep 100ms between pings
+            } catch (e: Exception) {
+                e.printStackTrace()
+                testListener.onError(e.message ?: "Unknown error")
+                break
                 }
-                try {
-                    val startTime = System.currentTimeMillis()
-                    val socket = Socket()
-                    val socketAddress = InetSocketAddress(serverHost, serverPort)
-                    socket.connect(socketAddress, 5000) // 5 seconds timeout
-                    val endTime = System.currentTimeMillis()
-                    val latency = endTime - startTime
-                    latencyMeasurements.add(latency)
-                    socket.close()
-                    val percent = (i.toDouble() / numPings) * 100
-                    val jitter = calculateJitterFromLatencies(latencyMeasurements)
-                    testListener.onLatencyMeasured(percent, latency, jitter)
-                    Thread.sleep(100) // Sleep 100ms between pings
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    testListener.onError(e.message ?: "Unknown error")
-                    break
-                }
-            }
+            }   
             if (latencyMeasurements.isNotEmpty()) {
                 val averageLatency = latencyMeasurements.average()
                 val jitter = calculateJitterFromLatencies(latencyMeasurements)
@@ -405,6 +414,11 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
     private fun cancelListening(args: Any, result: Result) {
         val currentListenerId = args as Int
         activeListeners.remove(currentListenerId)
+        val cancellationFlag = cancellationFlags[currentListenerId]
+        if (cancellationFlag != null) {
+            cancellationFlag.set(true)
+            cancellationFlags.remove(currentListenerId)
+        }
         result.success(null)
     }
 

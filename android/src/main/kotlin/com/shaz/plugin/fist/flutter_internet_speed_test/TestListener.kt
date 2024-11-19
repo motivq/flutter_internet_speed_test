@@ -10,7 +10,7 @@ interface TestListener {
 } 
 
 interface LatencyTestListener {
-    fun onLatencyMeasured(percent: Double, latency: Long, jitter: Double)
+    fun onLatencyMeasured(percent: Double, latency: Double, jitter: Double)
     fun onComplete(averageLatency: Double, jitter: Double)
     fun onError(errorMessage: String)
     fun onCancel()

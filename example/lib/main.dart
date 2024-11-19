@@ -35,6 +35,7 @@ class _MyAppState extends State<MyApp> {
   // Add variables for latency and jitter
   double _latency = 0;
   double _jitter = 0;
+  // ignore: unused_field
   String _latencyProgress = '0';
 
   @override
@@ -153,6 +154,8 @@ class _MyAppState extends State<MyApp> {
                           if (download.hasRan()) {
                             setState(() {
                               _downloadRate = download.value;
+                              _downloadRate = double.parse(
+                                  _downloadRate.toStringAsFixed(2));
                               _unitText = download.unit == SpeedUnit.kbps
                                   ? 'Kbps'
                                   : 'Mbps';
@@ -164,6 +167,8 @@ class _MyAppState extends State<MyApp> {
                           if (upload.hasRan()) {
                             setState(() {
                               _uploadRate = upload.value;
+                              _uploadRate =
+                                  double.parse(_uploadRate.toStringAsFixed(2));
                               _unitText = upload.unit == SpeedUnit.kbps
                                   ? 'Kbps'
                                   : 'Mbps';
@@ -183,10 +188,14 @@ class _MyAppState extends State<MyApp> {
                                 data.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
                             if (data.type == TestType.download) {
                               _downloadRate = data.value;
-                              _downloadProgress = percent.toStringAsFixed(2);
+                              _downloadProgress = percent.toStringAsFixed(1);
+                              _downloadRate = double.parse(
+                                  _downloadRate.toStringAsFixed(2));
                             } else if (data.type == TestType.upload) {
                               _uploadRate = data.value;
-                              _uploadProgress = percent.toStringAsFixed(2);
+                              _uploadProgress = percent.toStringAsFixed(1);
+                              _uploadRate =
+                                  double.parse(_uploadRate.toStringAsFixed(2));
                             }
                           });
                         },
@@ -216,6 +225,8 @@ class _MyAppState extends State<MyApp> {
                             _unitText =
                                 data.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
                             _downloadCompletionTime = data.durationInMillis;
+                            _downloadRate =
+                                double.parse(_downloadRate.toStringAsFixed(2));
                           });
                         },
                         onUploadComplete: (TestResult data) {
@@ -224,6 +235,8 @@ class _MyAppState extends State<MyApp> {
                             _unitText =
                                 data.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
                             _uploadCompletionTime = data.durationInMillis;
+                            _uploadRate =
+                                double.parse(_uploadRate.toStringAsFixed(1));
                           });
                         },
                         onPingTestDone: (TestResult data) {
@@ -235,6 +248,9 @@ class _MyAppState extends State<MyApp> {
                             _latency = data.value;
                             _jitter = data.jitter ?? 0;
                             _latencyProgress = '100';
+                            _latency =
+                                double.parse(_latency.toStringAsFixed(2));
+                            _jitter = double.parse(_jitter.toStringAsFixed(2));
                           });
                         },
                         onPingTestInProgress:
@@ -245,7 +261,11 @@ class _MyAppState extends State<MyApp> {
                           }
                           setState(() {
                             _latency = data.value;
-                            _latencyProgress = percent.toStringAsFixed(2);
+                            _latencyProgress = percent.toStringAsFixed(1);
+                            _jitter = data.jitter ?? 0;
+                            _latency = double.parse(_latency
+                                .toStringAsFixed(2)); // One decimal place
+                            _jitter = double.parse(_jitter.toStringAsFixed(2));
                           });
                         },
                         onCancel: () {

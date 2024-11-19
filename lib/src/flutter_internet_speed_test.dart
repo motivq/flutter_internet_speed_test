@@ -31,6 +31,8 @@ class FlutterInternetSpeedTest {
 
   bool isTestInProgress() => _isTestInProgress;
 
+  CancelListening? cancelLatencyTest;
+
   Future<void> startTesting({
     required ResultCallback onCompleted,
     DefaultCallback? onStarted,
@@ -54,6 +56,15 @@ class FlutterInternetSpeedTest {
     if (_isTestInProgress) {
       return;
     }
+
+    _isTestInProgress = true;
+
+    if (onStarted != null) onStarted();
+
+    await FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
+
+    // Reset cancelLatencyTest
+    cancelLatencyTest = null;
     if (await isInternetAvailable() == false) {
       if (onError != null) {
         onError('No internet connection', 'No internet connection');
@@ -64,11 +75,6 @@ class FlutterInternetSpeedTest {
     if (fileSizeInBytes < _defaultFileSize) {
       fileSizeInBytes = _defaultFileSize;
     }
-    _isTestInProgress = true;
-
-    if (onStarted != null) onStarted();
-
-    await FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
 
     if ((downloadTestServer == null || uploadTestServer == null) &&
         useFastApi) {
@@ -89,22 +95,28 @@ class FlutterInternetSpeedTest {
         downloadTestServer = downloadTestServer ?? url;
         uploadTestServer = uploadTestServer ?? url;
       }
-    } //TODO: need to implement the start ping testing and make sure the client is set and reused
-
+    }
+/*
     if (onPingTestInProgress != null) {
       onPingTestInProgress(0, TestResult(TestType.ping, 0, SpeedUnit.ms));
     }
+    */
+
     if (onPingTestDone != null) {
-      // ignore: unused_local_variable
-      CancelListening? cancelLatencyTest =
+      cancelLatencyTest =
           await FlutterInternetSpeedTestPlatform.instance.startLatencyTesting(
         testServer: downloadTestServer!,
         onDone: (double averageLatency, double jitter) {
           onPingTestDone(TestResult(TestType.ping, averageLatency, SpeedUnit.ms,
               jitter: jitter, ping: averageLatency));
-
-          _isTestInProgress = false;
-          _isCancelled = false;
+          if (_isCancelled) {
+            if (onCancel != null) {
+              onCancel();
+              _isTestInProgress = false;
+              _isCancelled = false;
+              return;
+            }
+          }
         },
         onProgress: (double percent, double averageLatency, double jitter) {
           if (onPingTestInProgress != null) {
@@ -166,6 +178,8 @@ class FlutterInternetSpeedTest {
         await FlutterInternetSpeedTestPlatform.instance.startUploadTesting(
           onDone: (double transferRate, SpeedUnit unit,
               {double? jitter, double? ping}) {
+            // Cancel the latency test
+            cancelLatencyTest?.call();
             final uploadDuration =
                 DateTime.now().millisecondsSinceEpoch - startUploadTimeStamp;
             final uploadResult = TestResult(TestType.upload, transferRate, unit,
@@ -232,6 +246,13 @@ class FlutterInternetSpeedTest {
 
   Future<bool> cancelTest() async {
     _isCancelled = true;
+
+    // Cancel the latency test
+    if (cancelLatencyTest != null) {
+      cancelLatencyTest?.call();
+      cancelLatencyTest = null; // Reset the variable
+    }
+
     return await FlutterInternetSpeedTestPlatform.instance.cancelTest();
   }
 

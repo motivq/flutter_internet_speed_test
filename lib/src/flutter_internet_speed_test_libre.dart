@@ -59,6 +59,72 @@ class SpeedTestConfig {
   String get getTelemetryLevel => telemetryLevel;
 }
 
+abstract class ServerSelector {
+  Future<void> ensureServerIsSelected(String testServer);
+}
+
+class DownloadServerSelector implements ServerSelector {
+  final SpeedTestConfig _speedTestConfig;
+  final Function(SpeedTestConfig) _initSpeedtest;
+  final Future<void> Function(String, Function(List<dynamic>?)) _loadServerList;
+  final void Function(Function(dynamic)) _selectServer;
+  final void Function(dynamic) _setSelectedServer;
+
+  DownloadServerSelector(
+    this._speedTestConfig,
+    this._initSpeedtest,
+    this._loadServerList,
+    this._selectServer,
+    this._setSelectedServer,
+  );
+
+  @override
+  Future<void> ensureServerIsSelected(String testServer) async {
+    if (_speedTestConfig.baseUrl != testServer) {
+      await _initSpeedtest(SpeedTestConfig(baseUrl: testServer));
+      await _selectAndSetServer();
+    }
+  }
+
+  Future<void> _selectAndSetServer() async {
+    Completer<void> serverSelectionCompleter = Completer();
+
+    await _loadServerList(_speedTestConfig.serverListUrl, (servers) {
+      if (servers != null) {
+        _selectServer((bestServer) {
+          if (bestServer != null) {
+            _setSelectedServer(bestServer);
+            serverSelectionCompleter.complete();
+          } else {
+            serverSelectionCompleter.completeError('No server selected');
+          }
+        });
+      } else {
+        serverSelectionCompleter.completeError('No servers found');
+      }
+    });
+
+    await serverSelectionCompleter.future;
+  }
+}
+
+class LatencyServerSelector extends DownloadServerSelector {
+  LatencyServerSelector({
+    required SpeedTestConfig speedTestConfig,
+    required Function(SpeedTestConfig) initSpeedtest,
+    required Future<void> Function(String, Function(List<dynamic>?))
+        loadServerList,
+    required void Function(Function(dynamic)) selectServer,
+    required void Function(dynamic) setSelectedServer,
+  }) : super(
+          speedTestConfig,
+          initSpeedtest,
+          loadServerList,
+          selectServer,
+          setSelectedServer,
+        );
+}
+
 class MethodChannelFlutterInternetSpeedTest
     extends FlutterInternetSpeedTestPlatform {
   final Logger _logger;
@@ -99,7 +165,8 @@ class MethodChannelFlutterInternetSpeedTest
     }
     return JsSpeedtest(JsObject(jsObject, [
       'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
-      type
+      type,
+      true
     ]));
   }
 
@@ -134,22 +201,24 @@ class MethodChannelFlutterInternetSpeedTest
     _speedTestConfig = config;
 
     if (configChanged) {
-      _downloadSpeedTest ??= JsSpeedtest(JsObject(
-          context['Speedtest'] as JsFunction, [
-        'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
-        'download'
-      ]));
-      _initializeSpeedTestInstance(_downloadSpeedTest!);
+      _downloadSpeedTest ??= _initializeJsSpeedtest('download');
+      if (_downloadSpeedTest != null) {
+        _initializeSpeedTestInstance(_downloadSpeedTest!);
+      }
 
-      _uploadSpeedTest ??= JsSpeedtest(JsObject(
-          context['Speedtest'] as JsFunction, [
-        'packages/flutter_internet_speed_test/assets/speedtest_worker.js',
-        'upload'
-      ]));
-      _initializeSpeedTestInstance(_uploadSpeedTest!);
+      _uploadSpeedTest ??= _initializeJsSpeedtest('upload');
+      if (_uploadSpeedTest != null) {
+        _initializeSpeedTestInstance(_uploadSpeedTest!);
+      }
 
-      await ensureDownloadServerIsSelected(config.baseUrl);
-      await ensureUploadServerIsSelected(config.baseUrl);
+      _latencySpeedTest ??= _initializeJsSpeedtest('ping');
+      if (_latencySpeedTest != null) {
+        _initializeSpeedTestInstance(_latencySpeedTest!);
+      }
+
+      //await ensureDownloadServerIsSelected(config.baseUrl);
+      //await ensureUploadServerIsSelected(config.baseUrl);
+      //await ensureLatencyServerIsSelected(config.baseUrl);
     } else {
       await _copyTheTestPointsIfPossible();
     }
@@ -157,11 +226,15 @@ class MethodChannelFlutterInternetSpeedTest
 
   Future<void> _copyTheTestPointsIfPossible() async {
     Completer<void> completer = Completer();
-
+    //TODO: copy from download or upload to latency
     if ((_downloadSpeedTest!.getState() as int) >= 2 &&
         (_uploadSpeedTest!.getState() as int) < 2) {
       final testPoints = _downloadSpeedTest!.getTestPoints();
-      final selectedServer = _downloadSpeedTest!.getSelectedServer();
+      //List.from(_downloadSpeedTest!.getTestPoints() as Iterable<dynamic>);
+      final selectedServer =
+          _downloadSpeedTest!.getSelectedServer(); //Map.from(
+      //jsToNative(_downloadSpeedTest!.getSelectedServer() as JsObject)
+      //  as Map<dynamic, dynamic>);
 
       _uploadSpeedTest!.addTestPoints(testPoints);
 
@@ -207,9 +280,14 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   Future<void> _getIpAndStartDownloadTest() async {
-    _client ??= await _fetchClientFromIp(_downloadSpeedTest!);
-    _downloadSpeedTest!.startDownloadTest();
-    return _downloadCompleter.future;
+    try {
+      await _copyTheTestPointsIfPossible();
+      _client ??= await _fetchClientFromIp(_downloadSpeedTest!);
+      _downloadSpeedTest!.startDownloadTest();
+      return _downloadCompleter.future;
+    } catch (e) {
+      _downloadCompleter.completeError(e);
+    }
   }
 
   Future<void> _getIpAndStartUploadTest() async {
@@ -235,69 +313,95 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   Future<void> ensureDownloadServerIsSelected(String testServer) async {
-    if (_speedTestConfig == null || _speedTestConfig!.baseUrl != testServer) {
-      // Initialize speed test with the new server
+    if (_downloadSpeedTest == null ||
+        _speedTestConfig == null ||
+        _speedTestConfig!.baseUrl != testServer) {
       await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
-
-      // Create a completer to wait for the server selection process to complete
-      Completer<void> serverSelectionCompleter = Completer();
-
-      // Load server list and select the server
-      await loadDownloadServerList(_speedTestConfig!.serverListUrl, (servers) {
-        if (servers != null) {
-          //var mappedServers = jsObjectToMap(servers as JsObject);
-          //print(mappedServers);
-
-          selectDownloadServer((bestServer) {
-            if (bestServer != null) {
-              setSelectedDownloadServer(bestServer);
-
-              serverSelectionCompleter.complete(); // Complete the completer
-            } else {
-              serverSelectionCompleter.completeError('No server selected');
-            }
-          });
-        } else {
-          serverSelectionCompleter.completeError('No servers found');
-        }
-      });
-
-      // Wait for the server selection process to complete
-      await serverSelectionCompleter.future;
     }
+    await _selectAndSetServer(_downloadSpeedTest!);
   }
 
   Future<void> ensureUploadServerIsSelected(String testServer) async {
-    if (_speedTestConfig == null || _speedTestConfig!.baseUrl != testServer) {
-      // Initialize speed test with the new server
+    if (_uploadSpeedTest == null ||
+        _speedTestConfig == null ||
+        _speedTestConfig!.baseUrl != testServer) {
       await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
-
-      // Create a completer to wait for the server selection process to complete
-      Completer<void> serverSelectionCompleter = Completer();
-
-      // Load server list and select the server
-      await loadUploadServerList(_speedTestConfig!.serverListUrl, (servers) {
-        if (servers != null) {
-          //var mappedServers = jsObjectToMap(servers as JsObject);
-          //print(mappedServers);
-
-          selectUploadServer((bestServer) {
-            if (bestServer != null) {
-              setSelectedUploadServer(bestServer);
-
-              serverSelectionCompleter.complete(); // Complete the completer
-            } else {
-              serverSelectionCompleter.completeError('No server selected');
-            }
-          });
-        } else {
-          serverSelectionCompleter.completeError('No servers found');
-        }
-      });
-
-      // Wait for the server selection process to complete
-      await serverSelectionCompleter.future;
     }
+    await _selectAndSetServer(_uploadSpeedTest!);
+  }
+
+  Future<void> ensureLatencyServerIsSelected(String testServer) async {
+    if (_latencySpeedTest == null ||
+        _speedTestConfig == null ||
+        _speedTestConfig!.baseUrl != testServer) {
+      await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
+    }
+    await _selectAndSetServer(_latencySpeedTest!);
+  }
+
+  Future<void> _selectAndSetServer(ISpeedtest targetTest) async {
+    Completer<void> serverSelectionCompleter = Completer();
+
+    // Helper function to copy test points and selected server
+    void copyTestPointsAndServer(ISpeedtest from, ISpeedtest to) {
+      final testPoints = from.getTestPoints();
+      final selectedServer = from.getSelectedServer();
+      to.addTestPoints(testPoints);
+      to.setSelectedServer(selectedServer);
+    }
+
+    // Check and copy test points and selected server
+    if ((targetTest.getState() as int) < 2) {
+      if ((_downloadSpeedTest!.getState() as int) >= 2) {
+        copyTestPointsAndServer(_downloadSpeedTest!, targetTest);
+        serverSelectionCompleter.complete();
+      } else if ((_uploadSpeedTest!.getState() as int) >= 2) {
+        copyTestPointsAndServer(_uploadSpeedTest!, targetTest);
+        serverSelectionCompleter.complete();
+      } else if ((_latencySpeedTest!.getState() as int) >= 2) {
+        copyTestPointsAndServer(_latencySpeedTest!, targetTest);
+        serverSelectionCompleter.complete();
+      } else {
+        // If none have the test points, proceed with server selection for the target test
+        await loadServerListForTest(targetTest, _speedTestConfig!.serverListUrl,
+            (servers) {
+          if (servers != null) {
+            selectServerForTest(targetTest, (bestServer) {
+              if (bestServer != null) {
+                setSelectedServerForTest(targetTest, bestServer);
+                serverSelectionCompleter.complete();
+              } else {
+                serverSelectionCompleter.completeError('No server selected');
+              }
+            });
+          } else {
+            serverSelectionCompleter.completeError('No servers found');
+          }
+        });
+      }
+    } else {
+      serverSelectionCompleter.complete();
+    }
+
+    await serverSelectionCompleter.future;
+  }
+
+  Future<void> loadServerListForTest(
+      ISpeedtest test, String serverListUrl, Function callback) async {
+    test.callMethod('loadServerList', [
+      serverListUrl,
+      allowInterop(callback),
+    ]);
+  }
+
+  Future<void> selectServerForTest(ISpeedtest test, Function callback) async {
+    test.callMethod('selectServer', [
+      allowInterop(callback),
+    ]);
+  }
+
+  void setSelectedServerForTest(ISpeedtest test, dynamic server) {
+    test.callMethod('setSelectedServer', [server]);
   }
 
   @override
@@ -308,6 +412,7 @@ class MethodChannelFlutterInternetSpeedTest
     required CancelCallback onCancel,
     required int fileSize,
     required String testServer,
+    Map<String, dynamic>? additionalConfigs,
   }) async {
     await ensureDownloadServerIsSelected(testServer);
 
@@ -315,6 +420,9 @@ class MethodChannelFlutterInternetSpeedTest
         Tuple4(onError, onProgress, onDone, onCancel);
 
     if (_downloadSpeedTest != null) {
+      additionalConfigs?.forEach((key, value) {
+        _downloadSpeedTest!.setParameter(key, value);
+      });
       _downloadSpeedTest!.onUpdate(_onUpdate);
       _downloadSpeedTest!.onEnd(_onEndDownload);
     }
@@ -359,6 +467,7 @@ class MethodChannelFlutterInternetSpeedTest
     required ErrorCallback onError,
     required CancelCallback onCancel,
     required String testServer,
+    Map<String, dynamic>? additionalConfigs,
   }) async {
     await ensureLatencyServerIsSelected(testServer);
 
@@ -366,6 +475,10 @@ class MethodChannelFlutterInternetSpeedTest
         Tuple4(onError, onProgress, onDone, onCancel);
 
     if (_latencySpeedTest != null) {
+      _latencySpeedTest!.setParameter('count_ping', 100);
+      additionalConfigs?.forEach((key, value) {
+        _latencySpeedTest!.setParameter(key, value);
+      });
       _latencySpeedTest!.onUpdate(_onLatencyUpdate);
       _latencySpeedTest!.onEnd(_onEndLatency);
     }
@@ -380,15 +493,13 @@ class MethodChannelFlutterInternetSpeedTest
   ISpeedtest? _latencySpeedTest;
 
   Future<void> _getIpAndStartLatencyTest() async {
+    if (_latencySpeedTest == null) {
+      throw Exception('Latency SpeedTest instance is not initialized.');
+    }
     _client ??= await _fetchClientFromIp(_latencySpeedTest!);
-    _latencySpeedTest!.startPingTest();
+    _latencySpeedTest!.startContinuousPingTest();
     // You might need to create a new Completer for latency if required
-    // return _latencyCompleter.future;
-  }
-
-  Future<void> ensureLatencyServerIsSelected(String testServer) async {
-    // Similar to ensureDownloadServerIsSelected
-    // Initialize _latencySpeedTest and select the server
+    //return _latencyCompleter.future;
   }
 
 //TODO: need to implement the start ping testing
@@ -402,6 +513,7 @@ class MethodChannelFlutterInternetSpeedTest
     required String testServer,
   }) async {
     await _initSpeedtest(config: SpeedTestConfig(baseUrl: testServer));
+    await ensureLatencyServerIsSelected(testServer);
 
     // Store callbacks
     callbacksById[TestType.ping.toString()] =
@@ -426,7 +538,7 @@ class MethodChannelFlutterInternetSpeedTest
     }
 
     // Wait for IP fetch before starting test
-    await _getIpAndStartDownloadTest();
+    await _getIpAndStartLatencyTest();
 
     return () {
       cancelTest();
@@ -561,7 +673,6 @@ class MethodChannelFlutterInternetSpeedTest
   Future<bool> cancelTest() async {
     if (_downloadSpeedTest != null) {
       _downloadSpeedTest!.callMethod('abort');
-      return true;
     }
     if (_uploadSpeedTest != null) {
       _uploadSpeedTest!.callMethod('abort');
@@ -650,7 +761,7 @@ class MethodChannelFlutterInternetSpeedTest
         callbackTuple.item3(double.tryParse(finalSpeed) ?? 0.0,
             SpeedUnit.mbps); // Replace 0.0 with actual rate
       }
-      //todo: THIS DOESN'T HANDLE THE UPLOAD CASE
+
       _downloadCompleter.complete();
       callbacksById.remove(TestType.download.toString());
     }
@@ -674,10 +785,17 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   void _onEndPing(
-      bool aborted, String testType, double finalSpeed, double jitter) {
+      bool aborted, String testType, double finalPing, double finalJitter) {
     var callbackTuple = callbacksById[TestType.ping.toString()];
     if (callbackTuple != null) {
-      callbackTuple.item3(finalSpeed, SpeedUnit.mbps);
+      if (aborted) {
+        callbackTuple.item1('Test aborted', 'Aborted');
+      } else {
+        double averageLatency = double.tryParse(finalPing.toString()) ?? 0.0;
+        double jitter = finalJitter;
+        callbackTuple.item3(averageLatency, SpeedUnit.ms,
+            jitter: jitter, ping: averageLatency);
+      }
       callbacksById.remove(TestType.ping.toString());
     }
   }

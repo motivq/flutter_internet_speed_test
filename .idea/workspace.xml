@@ -5,20 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="8e1267c8-8a0d-4a0e-930e-4ce11ec001de" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/flutter_internet_speed_test.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_SDK.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/libraries/Flutter_Plugins.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/analysis_options.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/analysis_options.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/android/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/CallbacksEnum.kt" beforeDir="false" afterPath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/CallbacksEnum.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt" beforeDir="false" afterPath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/TestListener.kt" beforeDir="false" afterPath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/TestListener.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test_method_channel.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test_method_channel.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/main.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test_libre.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test_libre.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,10 +42,10 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "DEBUGGABLE_DEVICE": "Pixel_7_Pro_API_35 [emulator-5554]",
+    "DEBUGGABLE_DEVICE": "Medium_Phone_API_35_HW [emulator-5556]",
     "DEBUGGABLE_PROCESS": "com.shaz.plugin.fist.flutter_internet_speed_test_example",
     "DEBUGGER_ID": "Java",
-    "Flutter.main.dart.executor": "Run",
+    "Flutter.main.dart.executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
@@ -92,6 +83,13 @@
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="kotlin-line">
+          <url>file://$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt</url>
+          <line>305</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+      </breakpoints>
       <default-breakpoints>
         <breakpoint enabled="true" type="CidrExceptionBreakpoint" />
       </default-breakpoints>
