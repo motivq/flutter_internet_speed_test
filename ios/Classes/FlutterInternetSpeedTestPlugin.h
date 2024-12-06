@@ -1,4 +1,4 @@
 #import <Flutter/Flutter.h>
 
-@interface FlutterInternetSpeedTestPlugin : NSObject<FlutterPlugin>
+@interface FlutterInternetSpeedTestPlugin : NSObject <FlutterPlugin>
 @end
