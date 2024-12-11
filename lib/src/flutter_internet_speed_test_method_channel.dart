@@ -72,6 +72,8 @@ class MethodChannelFlutterInternetSpeedTest
               .d('onLatencyComplete: latency=$averageLatency, jitter=$jitter');
         }
         callbacks.item3(averageLatency, jitter);
+        // After completion, the code cancels listening for this test.
+        // If you wanted the latency test to stay active (for concurrency), you might remove this line.
         methodChannel.invokeMethod("cancelListening", args["id"]);
         latencyCallbacksById.remove(idStr);
         break;

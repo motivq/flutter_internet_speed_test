@@ -17,7 +17,7 @@ class FlutterInternetSpeedTest {
   static const _defaultDownloadTestServer =
       'http://speedtest.ftp.otenet.gr/files/test10Mb.db';
   static const _defaultUploadTestServer = 'http://speedtest.ftp.otenet.gr/';
-  static const _defaultFileSize = 10 * 1024 * 1024; //10 MB
+  static const _defaultFileSize = 10 * 1024 * 1024; // 10 MB
 
   static final FlutterInternetSpeedTest _instance =
       FlutterInternetSpeedTest._private();
@@ -63,12 +63,12 @@ class FlutterInternetSpeedTest {
 
     await FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
 
-    // Reset cancelLatencyTest
     cancelLatencyTest = null;
     if (await isInternetAvailable() == false) {
       if (onError != null) {
         onError('No internet connection', 'No internet connection');
       }
+      _resetTestState();
       return;
     }
 
@@ -96,27 +96,48 @@ class FlutterInternetSpeedTest {
         uploadTestServer = uploadTestServer ?? url;
       }
     }
-/*
-    if (onPingTestInProgress != null) {
-      onPingTestInProgress(0, TestResult(TestType.ping, 0, SpeedUnit.ms));
-    }
-    */
 
+    if (downloadTestServer == null || uploadTestServer == null) {
+      downloadTestServer = downloadTestServer ?? _defaultDownloadTestServer;
+      uploadTestServer = uploadTestServer ?? _defaultUploadTestServer;
+    }
+
+    if (_isCancelled) {
+      if (onCancel != null) {
+        onCancel();
+        _resetTestState();
+        return;
+      }
+    }
+
+    // Step 1: Perform latency test
     if (onPingTestDone != null) {
-      cancelLatencyTest =
-          await FlutterInternetSpeedTestPlatform.instance.startLatencyTesting(
-        testServer: downloadTestServer!,
-        onDone: (double averageLatency, double jitter) {
+      await FlutterInternetSpeedTestPlatform.instance.startLatencyTesting(
+        testServer: downloadTestServer,
+        onDone: (double averageLatency, double jitter) async {
           onPingTestDone(TestResult(TestType.ping, averageLatency, SpeedUnit.ms,
               jitter: jitter, ping: averageLatency));
           if (_isCancelled) {
             if (onCancel != null) {
               onCancel();
-              _isTestInProgress = false;
-              _isCancelled = false;
+              _resetTestState();
               return;
             }
           }
+
+          // Step 2: Perform download test after latency test completes
+          await _performDownloadTest(
+            downloadTestServer,
+            uploadTestServer,
+            fileSizeInBytes,
+            onDownloadComplete,
+            onUploadComplete,
+            onProgress,
+            onCompleted,
+            onError,
+            onCancel,
+            onGetIPDone,
+          );
         },
         onProgress: (double percent, double averageLatency, double jitter) {
           if (onPingTestInProgress != null) {
@@ -128,37 +149,33 @@ class FlutterInternetSpeedTest {
         },
         onError: (String errorMessage, String speedTestError) {
           if (onError != null) onError(errorMessage, speedTestError);
-          _isTestInProgress = false;
-          _isCancelled = false;
+          _resetTestState();
         },
         onCancel: () {
           if (onCancel != null) onCancel();
-          _isTestInProgress = false;
-          _isCancelled = false;
+          _resetTestState();
         },
       );
-
-      //onGetIpDone(serverSelectionResponse?.client);
     }
+  }
 
-    if (downloadTestServer == null || uploadTestServer == null) {
-      downloadTestServer = downloadTestServer ?? _defaultDownloadTestServer;
-      uploadTestServer = uploadTestServer ?? _defaultUploadTestServer;
-    }
-
-    if (_isCancelled) {
-      if (onCancel != null) {
-        onCancel();
-        _isTestInProgress = false;
-        _isCancelled = false;
-        return;
-      }
-    }
-
+  Future<void> _performDownloadTest(
+    String? downloadTestServer,
+    String? uploadTestServer,
+    int fileSizeInBytes,
+    ResultCompletionCallback? onDownloadComplete,
+    ResultCompletionCallback? onUploadComplete,
+    TestProgressCallback? onProgress,
+    ResultCallback onCompleted,
+    ErrorCallback? onError,
+    CancelCallback? onCancel,
+    DefaultServerSelectionCallback? onGetIPDone,
+  ) async {
     var startDownloadTimeStamp = DateTime.now().millisecondsSinceEpoch;
     await FlutterInternetSpeedTestPlatform.instance.startDownloadTesting(
       onDone: (double transferRate, SpeedUnit unit,
           {double? jitter, double? ping}) async {
+        print('Download test completed');
         final downloadDuration =
             DateTime.now().millisecondsSinceEpoch - startDownloadTimeStamp;
         final downloadResult = TestResult(TestType.download, transferRate, unit,
@@ -167,72 +184,83 @@ class FlutterInternetSpeedTest {
         if (onProgress != null) onProgress(100, downloadResult);
         if (onDownloadComplete != null) onDownloadComplete(downloadResult);
 
-        final startUploadTimeStamp = DateTime.now().millisecondsSinceEpoch;
-
-        if (onGetIPDone != null) {
-          Client? client = await FlutterInternetSpeedTestPlatform.instance
-              .getClientInformation();
-          onGetIPDone(client);
-        }
-
-        await FlutterInternetSpeedTestPlatform.instance.startUploadTesting(
-          onDone: (double transferRate, SpeedUnit unit,
-              {double? jitter, double? ping}) {
-            // Cancel the latency test
-            cancelLatencyTest?.call();
-            final uploadDuration =
-                DateTime.now().millisecondsSinceEpoch - startUploadTimeStamp;
-            final uploadResult = TestResult(TestType.upload, transferRate, unit,
-                durationInMillis: uploadDuration);
-
-            if (onProgress != null) onProgress(100, uploadResult);
-            if (onUploadComplete != null) onUploadComplete(uploadResult);
-            FlutterInternetSpeedTestPlatform.instance
-                .resetTest(softReset: true);
-            onCompleted(downloadResult, uploadResult);
-            _isTestInProgress = false;
-            _isCancelled = false;
-          },
-          onProgress: (double percent, double transferRate, SpeedUnit unit,
-              {double? jitter, double? ping}) {
-            final uploadProgressResult =
-                TestResult(TestType.upload, transferRate, unit);
-            if (onProgress != null) {
-              onProgress(percent, uploadProgressResult);
-            }
-          },
-          onError: (String errorMessage, String speedTestError) {
-            if (onError != null) onError(errorMessage, speedTestError);
-            _isTestInProgress = false;
-            _isCancelled = false;
-          },
-          onCancel: () {
-            if (onCancel != null) onCancel();
-            _isTestInProgress = false;
-            _isCancelled = false;
-          },
-          fileSize: fileSizeInBytes,
-          testServer: uploadTestServer!,
+        // Step 3: Perform upload test after download test completes
+        await _performUploadTest(
+          uploadTestServer,
+          fileSizeInBytes,
+          onUploadComplete,
+          onProgress,
+          onCompleted,
+          downloadResult,
+          onError,
+          onCancel,
         );
       },
       onProgress: (double percent, double transferRate, SpeedUnit unit,
           {double? jitter, double? ping}) {
         final downloadProgressResult =
             TestResult(TestType.download, transferRate, unit);
+        print('Download progress: $percent');
         if (onProgress != null) onProgress(percent, downloadProgressResult);
       },
       onError: (String errorMessage, String speedTestError) {
         if (onError != null) onError(errorMessage, speedTestError);
-        _isTestInProgress = false;
-        _isCancelled = false;
+        print('Download error: $errorMessage');
+        _resetTestState();
       },
       onCancel: () {
         if (onCancel != null) onCancel();
-        _isTestInProgress = false;
-        _isCancelled = false;
+        _resetTestState();
       },
       fileSize: fileSizeInBytes,
-      testServer: downloadTestServer,
+      testServer: downloadTestServer!,
+    );
+  }
+
+  Future<void> _performUploadTest(
+    String? uploadTestServer,
+    int fileSizeInBytes,
+    ResultCompletionCallback? onUploadComplete,
+    TestProgressCallback? onProgress,
+    ResultCallback onCompleted,
+    TestResult downloadResult,
+    ErrorCallback? onError,
+    CancelCallback? onCancel,
+  ) async {
+    var startUploadTimeStamp = DateTime.now().millisecondsSinceEpoch;
+    await FlutterInternetSpeedTestPlatform.instance.startUploadTesting(
+      onDone: (double transferRate, SpeedUnit unit,
+          {double? jitter, double? ping}) {
+        final uploadDuration =
+            DateTime.now().millisecondsSinceEpoch - startUploadTimeStamp;
+        final uploadResult = TestResult(TestType.upload, transferRate, unit,
+            durationInMillis: uploadDuration);
+
+        if (onProgress != null) onProgress(100, uploadResult);
+        if (onUploadComplete != null) onUploadComplete(uploadResult);
+
+        FlutterInternetSpeedTestPlatform.instance.resetTest(softReset: true);
+        onCompleted(downloadResult, uploadResult);
+        _resetTestState();
+      },
+      onProgress: (double percent, double transferRate, SpeedUnit unit,
+          {double? jitter, double? ping}) {
+        final uploadProgressResult =
+            TestResult(TestType.upload, transferRate, unit);
+        if (onProgress != null) {
+          onProgress(percent, uploadProgressResult);
+        }
+      },
+      onError: (String errorMessage, String speedTestError) {
+        if (onError != null) onError(errorMessage, speedTestError);
+        _resetTestState();
+      },
+      onCancel: () {
+        if (onCancel != null) onCancel();
+        _resetTestState();
+      },
+      fileSize: fileSizeInBytes,
+      testServer: uploadTestServer!,
     );
   }
 
@@ -260,5 +288,10 @@ class FlutterInternetSpeedTest {
 
   Future<String?> getPlatformVersion() async {
     return await FlutterInternetSpeedTestPlatform.instance.getPlatformVersion();
+  }
+
+  void _resetTestState() {
+    _isTestInProgress = false;
+    _isCancelled = false;
   }
 }
