@@ -15,8 +15,15 @@ public protocol HostPingService {
     func ping(url: URL, timeout: TimeInterval, closure: @escaping (Result<Int, NetworkError>) -> ())
 }
 
-protocol SpeedService {
-    func test(_ url: URL, fileSize: Int, timeout: TimeInterval, current: @escaping (Speed, Speed) -> (), final: @escaping (Result<Speed, NetworkError>) -> ())
+public protocol SpeedService {
+    func test(
+        _ url: URL,
+        fileSize: Int,
+        timeout: TimeInterval,
+        current: @escaping (Speed) -> (),
+        final: @escaping (Result<Speed, NetworkError>) -> ()
+    )
+    func cancelTask()
 }
 
 extension SpeedService {

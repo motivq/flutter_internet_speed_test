@@ -19,9 +19,8 @@ class HostURLFormatter {
     }
     
     func downloadURL(size: Int) -> URL {
-        var urlComponents = URLComponents(url: downloadURL, resolvingAgainstBaseURL: false)!
-        urlComponents.port = 8080
-        urlComponents.queryItems = [URLQueryItem(name: "size", value: String(size))]
-        return urlComponents.url!
+        // *** CHANGE START ***
+        return initialUrl
+        // *** CHANGE END ***
     }
 }

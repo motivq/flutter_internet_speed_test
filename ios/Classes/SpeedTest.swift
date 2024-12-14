@@ -1,5 +1,4 @@
 import Foundation
-
 public enum SpeedTestError: Error {
     case networkError
     case hostNotFound
@@ -66,26 +65,28 @@ public final class SpeedTest {
         }
     }
     
-    public func runDownloadTest(for host: URL, size: Int, timeout: TimeInterval, current: @escaping (Speed) -> (), final: @escaping (Result<Speed, NetworkError>) -> ()) {
-        downloadService.test(host,
-                             fileSize: size,
-                             timeout: timeout,
-                             current: { (_, avgSpeed) in
-                                current(avgSpeed)
-                            }, final: { result in
-                                final(result)
-                            })
+    public func runDownloadTest(for host: URL, size: Int, timeout: TimeInterval,
+                               current: @escaping (Speed) -> (),
+                               final: @escaping (Result<Speed, NetworkError>) -> ()) {
+        // *** CHANGE START ***
+        downloadService.test(host, fileSize: size, timeout: timeout, current: { currentSpeed in
+            current(currentSpeed)
+        }, final: { result in
+            final(result)
+        })
+        // *** CHANGE END ***
     }
-    
-    public func runUploadTest(for host: URL, size: Int, timeout: TimeInterval, current: @escaping (Speed) -> (), final: @escaping (Result<Speed, NetworkError>) -> ()) {
-        uploadService.test(host,
-                           fileSize: size,
-                           timeout: timeout,
-                           current: { (_, avgSpeed) in
-                            current(avgSpeed)
-                        }, final: { result in
-                            final(result)
-                        })
+
+    public func runUploadTest(for host: URL, size: Int, timeout: TimeInterval,
+                              current: @escaping (Speed) -> (),
+                              final: @escaping (Result<Speed, NetworkError>) -> ()) {
+        // *** CHANGE START ***
+        uploadService.test(host, fileSize: size, timeout: timeout, current: { currentSpeed in
+            current(currentSpeed)
+        }, final: { result in
+            final(result)
+        })
+        // *** CHANGE END ***
     }
     
     public func cancelTasks(){

@@ -29,7 +29,6 @@ final internal class SpeedTestService: HostsProviderService {
                 closure(.error(NetworkError.wrongJSON)); return
             }
             
-            
             closure(.value(result))
         }.resume()
     }
@@ -39,7 +38,6 @@ final internal class SpeedTestService: HostsProviderService {
             switch result {
             case .value(let hosts):
                 closure(.value(Array(hosts.prefix(max))))
-                break
             case .error(let error):
                 closure(.error(error))
             }

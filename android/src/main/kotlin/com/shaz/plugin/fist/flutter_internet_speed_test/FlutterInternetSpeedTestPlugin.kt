@@ -23,7 +23,7 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** FlutterInternetSpeedTestPlugin */
-class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
+class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
     private val defaultFileSizeInBytes: Int = 10 * 1024 * 1024 //10 MB
     private val defaultTestTimeoutInMillis: Int = TimeUnit.SECONDS.toMillis(20).toInt()
     private val defaultResponseDelayInMillis: Int = TimeUnit.MILLISECONDS.toMillis(500).toInt()
@@ -87,21 +87,27 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         val fileSize =
             if (argsMap.containsKey("fileSize")) argsMap["fileSize"] as Int else defaultFileSizeInBytes
         when (val args = argsMap["id"] as Int) {
-            CallbacksEnum.START_DOWNLOAD_TESTING.ordinal -> startListening(args,
+            CallbacksEnum.START_DOWNLOAD_TESTING.ordinal -> startListening(
+                args,
                 result,
                 "startDownloadTesting",
                 argsMap["testServer"] as String,
-                fileSize)
-            CallbacksEnum.START_UPLOAD_TESTING.ordinal -> startListening(args,
+                fileSize
+            )
+            CallbacksEnum.START_UPLOAD_TESTING.ordinal -> startListening(
+                args,
                 result,
                 "startUploadTesting",
                 argsMap["testServer"] as String,
-                fileSize)
-            CallbacksEnum.START_LATENCY_TESTING.ordinal -> startListening(args,
+                fileSize
+            )
+            CallbacksEnum.START_LATENCY_TESTING.ordinal -> startListening(
+                args,
                 result,
                 "startLatencyTesting",
                 argsMap["testServer"] as String,
-                fileSize)
+                fileSize
+            )
         }
     }
 
@@ -121,17 +127,15 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         testServer: String,
         fileSize: Int,
     ) {
-        // Get callback id
         logger.print("Test starting")
         val currentListenerId = args as Int
         val argsMap: MutableMap<String, Any> = mutableMapOf()
         argsMap["id"] = currentListenerId
 
-        // Remove any existing listener and cancellation flag
         activeListeners.remove(currentListenerId)
         val existingCancellationFlag = cancellationFlags[currentListenerId]
         if (existingCancellationFlag != null) {
-        existingCancellationFlag.set(true)
+            existingCancellationFlag.set(true)
             cancellationFlags.remove(currentListenerId)
         }
 
@@ -148,19 +152,22 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
                         }
-                        // Remove listener and socket when done
                         activeListeners.remove(currentListenerId)
                         activeSockets.remove(currentListenerId)
                     }
 
                     override fun onError(speedTestError: String, errorMessage: String) {
-                        argsMap["speedTestError"] = speedTestError
-                        argsMap["errorMessage"] = errorMessage
+                        // *** CHANGE START ***
+                        // Ensure we have some non-empty error fields.
+                        val finalErrorMessage = if (errorMessage.isEmpty()) "Unknown error" else errorMessage
+                        val finalSpeedTestError = if (speedTestError.isEmpty()) "Unknown error" else speedTestError
+                        argsMap["speedTestError"] = finalSpeedTestError
+                        argsMap["errorMessage"] = finalErrorMessage
+                        // *** CHANGE END ***
                         argsMap["type"] = ListenerEnum.ERROR.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
                         }
-                        // Remove listener and socket when done
                         activeListeners.remove(currentListenerId)
                         activeSockets.remove(currentListenerId)
                     }
@@ -197,19 +204,22 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
                         }
-                        // Remove listener and socket when done
                         activeListeners.remove(currentListenerId)
                         activeSockets.remove(currentListenerId)
                     }
 
                     override fun onError(speedTestError: String, errorMessage: String) {
-                        argsMap["speedTestError"] = speedTestError
-                        argsMap["errorMessage"] = errorMessage
+                        // *** CHANGE START ***
+                        // Ensure we have some non-empty error fields.
+                        val finalErrorMessage = if (errorMessage.isEmpty()) "Unknown error" else errorMessage
+                        val finalSpeedTestError = if (speedTestError.isEmpty()) "Unknown error" else speedTestError
+                        argsMap["speedTestError"] = finalSpeedTestError
+                        argsMap["errorMessage"] = finalErrorMessage
+                        // *** CHANGE END ***
                         argsMap["type"] = ListenerEnum.ERROR.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
                         }
-                        // Remove listener and socket when done
                         activeListeners.remove(currentListenerId)
                         activeSockets.remove(currentListenerId)
                     }
@@ -241,72 +251,74 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                cancellationFlags[currentListenerId] = cancellationFlag
 
                 val listener = object : LatencyTestListener  {
-                     override fun onLatencyMeasured(percent: Double, latency: Double, jitter: Double) {
-                            argsMap["percent"] = percent
-                            argsMap["latency"] = latency
-                            argsMap["jitter"] = jitter
-                            argsMap["type"] = ListenerEnum.PROGRESS.ordinal
-                            activity?.runOnUiThread {
-                                methodChannel.invokeMethod("callListener", argsMap)
-                            }
+                    override fun onLatencyMeasured(percent: Double, latency: Double, jitter: Double) {
+                        argsMap["percent"] = percent
+                        argsMap["latency"] = latency
+                        argsMap["jitter"] = jitter
+                        argsMap["type"] = ListenerEnum.PROGRESS.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
                         }
+                    }
 
-                         override fun onComplete(averageLatency: Double, jitter: Double) {
-                            argsMap["latency"] = averageLatency
-                            argsMap["jitter"] = jitter
-                            argsMap["type"] = ListenerEnum.COMPLETE.ordinal
-                            activity?.runOnUiThread {
-                                methodChannel.invokeMethod("callListener", argsMap)
-                            }
-                            // Remove listener and cancellation flag when done
-                            activeListeners.remove(currentListenerId)
-                            cancellationFlags.remove(currentListenerId)
+                    override fun onComplete(averageLatency: Double, jitter: Double) {
+                        argsMap["latency"] = averageLatency
+                        argsMap["jitter"] = jitter
+                        argsMap["type"] = ListenerEnum.COMPLETE.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
                         }
-                        override fun onError(errorMessage: String) {
-                            argsMap["errorMessage"] = errorMessage
-                            argsMap["type"] = ListenerEnum.ERROR.ordinal
-                            activity?.runOnUiThread {
-                                methodChannel.invokeMethod("callListener", argsMap)
-                            }
-                            // Remove listener and cancellation flag when done
-                            activeListeners.remove(currentListenerId)
-                            cancellationFlags.remove(currentListenerId)
+                        activeListeners.remove(currentListenerId)
+                        cancellationFlags.remove(currentListenerId)
+                    }
+
+                    override fun onError(errorMessage: String) {
+                        // *** CHANGE START ***
+                        // Ensure non-empty error message
+                        val finalErrorMessage = if (errorMessage.isEmpty()) "Unknown error" else errorMessage
+                        argsMap["errorMessage"] = finalErrorMessage
+                        // *** CHANGE END ***
+                        argsMap["type"] = ListenerEnum.ERROR.ordinal
+                        activity?.runOnUiThread {
+                            methodChannel.invokeMethod("callListener", argsMap)
                         }
+                        activeListeners.remove(currentListenerId)
+                        cancellationFlags.remove(currentListenerId)
+                    }
 
                     override fun onCancel() {
                         argsMap["type"] = ListenerEnum.CANCEL.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
                         }
-                        // Remove listener and cancellation flag when cancelled
                         activeListeners.remove(currentListenerId)
                         cancellationFlags.remove(currentListenerId)
                     }
                 }
                 activeListeners[currentListenerId] = listener
-                 executorService.execute {
-                        testLatency(testServer, listener, cancellationFlag)
-                    }
+                executorService.execute {
+                    testLatency(testServer, listener, cancellationFlag)
+                }
             }
         }
         result.success(null)
     }
 
     private fun testLatency(testServer: String, testListener: LatencyTestListener, cancellationFlag: AtomicBoolean) {
-            val latencyMeasurements = mutableListOf<Long>()
-            val serverUrl = URL(testServer)
-            val serverHost = serverUrl.host
-            val serverPort = if (serverUrl.port != -1) serverUrl.port else serverUrl.defaultPort
+        val latencyMeasurements = mutableListOf<Long>()
+        val serverUrl = URL(testServer)
+        val serverHost = serverUrl.host
+        val serverPort = if (serverUrl.port != -1) serverUrl.port else serverUrl.defaultPort
 
-            val totalPings = 100 // Total number of pings
-            var currentPing = 0
+        val totalPings = 100
+        var currentPing = 0
 
-            while (!cancellationFlag.get() && currentPing < totalPings) {
+        while (!cancellationFlag.get() && currentPing < totalPings) {
             try {
                 val startTime = System.currentTimeMillis()
                 val socket = Socket()
                 val socketAddress = InetSocketAddress(serverHost, serverPort)
-                socket.connect(socketAddress, 5000) // 5 seconds timeout
+                socket.connect(socketAddress, 5000) // 5s timeout
                 val endTime = System.currentTimeMillis()
                 val latency = endTime - startTime
                 latencyMeasurements.add(latency)
@@ -315,22 +327,22 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                 currentPing++
                 val percent = (currentPing.toDouble() / totalPings) * 100.0
                 val jitter = calculateJitterFromLatencies(latencyMeasurements)
-                
+
                 testListener.onLatencyMeasured(percent, latency.toDouble(), jitter)
-                
-                Thread.sleep(100) // Sleep 100ms between pings
+
+                Thread.sleep(100)
             } catch (e: Exception) {
                 e.printStackTrace()
                 testListener.onError(e.message ?: "Unknown error")
                 break
-                }
-            }   
-            if (latencyMeasurements.isNotEmpty()) {
-                val averageLatency = latencyMeasurements.average()
-                val jitter = calculateJitterFromLatencies(latencyMeasurements)
-                testListener.onComplete(averageLatency, jitter)
             }
-        
+        }
+
+        if (latencyMeasurements.isNotEmpty() && !cancellationFlag.get()) {
+            val averageLatency = latencyMeasurements.average()
+            val jitter = calculateJitterFromLatencies(latencyMeasurements)
+            testListener.onComplete(averageLatency, jitter)
+        }
     }
 
     private fun calculateJitterFromLatencies(latencyMeasurements: List<Long>): Double {
@@ -341,7 +353,12 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         return jitters.average()
     }
 
-    private fun testUploadSpeed(speedTestSocket: SpeedTestSocket, testListener: TestListener, testServer: String, fileSize: Int) {
+    private fun testUploadSpeed(
+        speedTestSocket: SpeedTestSocket,
+        testListener: TestListener,
+        testServer: String,
+        fileSize: Int
+    ) {
         speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
             override fun onCompletion(report: SpeedTestReport) {
                 // Do nothing here
@@ -372,12 +389,17 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                     logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
                     testListener.onProgress(report.progressPercent.toDouble(), report.transferRateBit.toDouble())
                 }
-            })
+            }
+        )
         logger.print("After Testing")
     }
 
-    private fun testDownloadSpeed( speedTestSocket: SpeedTestSocket, testListener: TestListener, testServer: String, fileSize: Int) {
-
+    private fun testDownloadSpeed(
+        speedTestSocket: SpeedTestSocket,
+        testListener: TestListener,
+        testServer: String,
+        fileSize: Int
+    ) {
         speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
             override fun onCompletion(report: SpeedTestReport) {
                 // Do nothing here
@@ -407,7 +429,8 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
                     logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
                     testListener.onProgress(report.progressPercent.toDouble(), report.transferRateBit.toDouble())
                 }
-            })
+            }
+        )
         logger.print("After Testing")
     }
 
@@ -458,5 +481,3 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodCallHandler, Activit
         }).start()
     }
 }
-
-
