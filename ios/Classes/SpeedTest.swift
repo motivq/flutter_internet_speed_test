@@ -1,4 +1,5 @@
 import Foundation
+
 public enum SpeedTestError: Error {
     case networkError
     case hostNotFound
@@ -64,31 +65,43 @@ public final class SpeedTest {
             }
         }
     }
-    
+
     public func runDownloadTest(for host: URL, size: Int, timeout: TimeInterval,
-                               current: @escaping (Speed) -> (),
-                               final: @escaping (Result<Speed, NetworkError>) -> ()) {
-        // *** CHANGE START ***
-        downloadService.test(host, fileSize: size, timeout: timeout, current: { currentSpeed in
-            current(currentSpeed)
-        }, final: { result in
-            final(result)
-        })
-        // *** CHANGE END ***
+                                current: @escaping (Speed) -> (),
+                                final: @escaping (Result<Speed, NetworkError>) -> ()) {
+        DispatchQueue.main.async {
+            self.downloadService.test(host, fileSize: size, timeout: timeout,
+                                      current: { speed in
+                                          DispatchQueue.main.async {
+                                              current(speed)
+                                          }
+                                      },
+                                      final: { resultSpeed in
+                                          DispatchQueue.main.async {
+                                              final(resultSpeed)
+                                          }
+                                      })
+        }
     }
 
     public func runUploadTest(for host: URL, size: Int, timeout: TimeInterval,
                               current: @escaping (Speed) -> (),
                               final: @escaping (Result<Speed, NetworkError>) -> ()) {
-        // *** CHANGE START ***
-        uploadService.test(host, fileSize: size, timeout: timeout, current: { currentSpeed in
-            current(currentSpeed)
-        }, final: { result in
-            final(result)
-        })
-        // *** CHANGE END ***
+        DispatchQueue.main.async {
+            self.uploadService.test(host, fileSize: size, timeout: timeout,
+                                    current: { speed in
+                                        DispatchQueue.main.async {
+                                            current(speed)
+                                        }
+                                    },
+                                    final: { resultSpeed in
+                                        DispatchQueue.main.async {
+                                            final(resultSpeed)
+                                        }
+                                    })
+        }
     }
-    
+
     public func cancelTasks(){
         downloadService.cancelTask()
         uploadService.cancelTask()

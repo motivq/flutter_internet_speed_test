@@ -1,19 +1,18 @@
-// *** FILE: CustomHostDownloadService.swift ***
-// *** CHANGE START ***
-// Replaced .failure with .error and .success with .value 
-// to match the custom Result enum cases.
-// Also explicitly prefixed NetworkError cases.
+// CustomHostDownloadService.swift
 import Foundation
 
 class CustomHostDownloadService: NSObject, SpeedService {
+    private let defaultTestTimeoutInMillis: TimeInterval = 20.0
+    private let defaultReportInterval: TimeInterval = 0.1
     private var task: URLSessionDataTask?
     private var current: ((Speed) -> ())!
     private var final: ((Result<Speed, NetworkError>) -> ())!
     private var totalBytesReceived: Int64 = 0
-    private var lastBytesReceivedForCalc: Int64 = 0
-    private var responseDate: Date?
-    private var calcStartDate: Date?
-
+    private var startTime: Date?
+    private var didCallFinal = false
+    private var lastReportTime: Date?
+    private var lastReportBytes: Int64 = 0
+    
     func test(
         _ url: URL,
         fileSize: Int,
@@ -21,80 +20,103 @@ class CustomHostDownloadService: NSObject, SpeedService {
         current: @escaping (Speed) -> (),
         final: @escaping (Result<Speed, NetworkError>) -> ()
     ) {
+        // Reset state
         self.current = current
         self.final = final
-
+        self.totalBytesReceived = 0
+        self.lastReportBytes = 0
+        self.startTime = Date()
+        self.lastReportTime = Date()
+        self.didCallFinal = false
+        
+        // Setup force completion timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + defaultTestTimeoutInMillis) { [weak self] in
+            self?.finalizeTest()
+        }
+        
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout
+        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        config.urlCache = nil
+        
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-
+        startDownload(url: url, session: session, fileSize: fileSize)
+    }
+    
+    private func startDownload(url: URL, session: URLSession, fileSize: Int) {
+        // Use HostURLFormatter to request a large file.
+        let hostFormatter = HostURLFormatter(speedTestURL: url)
+        let finalURL = hostFormatter.downloadURL(size: fileSize)
+        
         let request = URLRequest(
-            url: url,
+            url: finalURL,
             cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-            timeoutInterval: timeout
+            timeoutInterval: defaultTestTimeoutInMillis
         )
+
         task = session.dataTask(with: request)
-
-        responseDate = Date()
-        calcStartDate = responseDate
-        totalBytesReceived = 0
-        lastBytesReceivedForCalc = 0
-
         task?.resume()
     }
-
+    
     func cancelTask() {
         task?.cancel()
+        if !didCallFinal {
+            didCallFinal = true
+            final(.error(.requestFailed))
+        }
     }
-
-    private func calculateSpeed(bytes: Int64, seconds: TimeInterval) -> Speed {
-        return Speed(bytes: bytes, seconds: seconds).pretty
+    
+    private func finalizeTest() {
+        guard !didCallFinal else { return }
+        didCallFinal = true
+        
+        task?.cancel()
+        
+        let finalSpeed = calculateSpeed(bytes: totalBytesReceived, start: startTime ?? Date(), end: Date())
+        DispatchQueue.main.async {
+            self.final(.value(finalSpeed))
+        }
+    }
+    
+    private func calculateSpeed(bytes: Int64, start: Date, end: Date) -> Speed {
+        let elapsed = end.timeIntervalSince(start)
+        guard elapsed > 0 else { return Speed(value: 0, units: .Kbps) }
+        return Speed(bytes: bytes, seconds: elapsed).pretty
+    }
+    
+    private func reportProgress() {
+        guard let lastReport = lastReportTime else { return }
+        let now = Date()
+        let bytesSinceLastReport = totalBytesReceived - lastReportBytes
+        let speed = calculateSpeed(bytes: bytesSinceLastReport, start: lastReport, end: now)
+        
+        lastReportTime = now
+        lastReportBytes = totalBytesReceived
+        
+        DispatchQueue.main.async {
+            self.current(speed)
+        }
     }
 }
 
 extension CustomHostDownloadService: URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         totalBytesReceived += Int64(data.count)
-        let now = Date()
-
-        guard let calcStart = calcStartDate else { return }
-        let elapsed = now.timeIntervalSince(calcStart)
-        let bytesThisChunk = totalBytesReceived - lastBytesReceivedForCalc
-
-        if elapsed > 0 {
-            let currentSpeed = calculateSpeed(bytes: bytesThisChunk, seconds: elapsed)
-            DispatchQueue.global(qos: .background).async {
-                self.current(currentSpeed)
-            }
-
-            lastBytesReceivedForCalc = totalBytesReceived
-            calcStartDate = now
+        
+        // Only report progress every defaultReportInterval
+        if let lastReport = lastReportTime,
+           Date().timeIntervalSince(lastReport) >= defaultReportInterval {
+            reportProgress()
         }
     }
-
+    
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let _ = error {
-            // *** CHANGE START ***
-            // Using .error instead of .failure
-            // Using .error(.requestFailed) instead of .failure(.requestFailed)
-            final(.error(NetworkError.requestFailed))
-            // *** CHANGE END ***
-        } else {
-            guard let start = responseDate else {
-                // *** CHANGE START ***
-                // Using .error instead of .failure
-                final(.error(NetworkError.requestFailed))
-                // *** CHANGE END ***
-                return
+        if let _ = error, !didCallFinal {
+            didCallFinal = true
+            DispatchQueue.main.async {
+                self.final(.error(.requestFailed))
             }
-            let elapsed = Date().timeIntervalSince(start)
-            let finalSpeed = calculateSpeed(bytes: totalBytesReceived, seconds: elapsed)
-            // *** CHANGE START ***
-            // Using .value instead of .success
-            final(.value(finalSpeed))
-            // *** CHANGE END ***
         }
     }
 }
-// *** CHANGE END ***
