@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -14,23 +13,22 @@ import 'callbacks_enum.dart';
 import 'flutter_internet_speed_test_platform_interface.dart';
 import 'models/client.dart';
 
-/// An implementation of [FlutterInternetSpeedTestPlatform] that uses method channels.
 class MethodChannelFlutterInternetSpeedTest
     extends FlutterInternetSpeedTestPlatform {
-  /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel('com.shaz.plugin.fist/method');
   final _logger = Logger();
 
   Client? _client;
   @override
-  bool isLogEnabled = false;
+  bool isLogEnabled = true;
 
   Future<void> _methodCallHandler(MethodCall call) async {
     if (isLogEnabled) {
-      _logger.d('call method is ${call.method}');
-      _logger.d('arguments are ${call.arguments}');
-      _logger.d('callbacks are $callbacksById');
+      _logger.d('methodCallHandler: method is ${call.method}');
+      _logger.d('methodCallHandler: arguments are ${call.arguments}');
+      _logger.d(
+          'methodCallHandler: callbacks are $callbacksById $latencyCallbacksById');
     }
 
     if (call.method == 'callListener') {
@@ -47,8 +45,7 @@ class MethodChannelFlutterInternetSpeedTest
       }
     } else {
       if (isLogEnabled) {
-        _logger.d(
-            'TestFairy: Ignoring invoke from native. This normally shouldn\'t happen.');
+        _logger.d('Ignoring unknown native call: ${call.method}');
       }
     }
   }
@@ -58,7 +55,7 @@ class MethodChannelFlutterInternetSpeedTest
     final callbacks = latencyCallbacksById[idStr];
     if (callbacks == null) {
       if (isLogEnabled) {
-        _logger.d('No callbacks found for id ${args['id']}');
+        _logger.d('No latency callbacks found for id ${args['id']}');
       }
       return;
     }
@@ -69,18 +66,21 @@ class MethodChannelFlutterInternetSpeedTest
         final jitter = args['jitter'] as double;
         if (isLogEnabled) {
           _logger
-              .d('onLatencyComplete: latency=$averageLatency, jitter=$jitter');
+              .d('LATENCY COMPLETE: latency=$averageLatency, jitter=$jitter');
         }
         callbacks.item3(averageLatency, jitter);
+        // For latency, we continue to cancel after done as original.
         methodChannel.invokeMethod("cancelListening", args["id"]);
         latencyCallbacksById.remove(idStr);
         break;
       case ListenerEnum.error:
-        final errorMessage = args['errorMessage'] as String;
+        final errorMsg = (args['errorMessage'] as String?) ??
+            (args['speedTestError'] as String?) ??
+            'Unknown error';
         if (isLogEnabled) {
-          _logger.d('onLatencyError: $errorMessage');
+          _logger.d('LATENCY ERROR: $errorMsg');
         }
-        callbacks.item1(errorMessage, '');
+        callbacks.item1(errorMsg, '');
         methodChannel.invokeMethod("cancelListening", args["id"]);
         latencyCallbacksById.remove(idStr);
         break;
@@ -90,13 +90,13 @@ class MethodChannelFlutterInternetSpeedTest
         final jitter = args['jitter'] as double;
         if (isLogEnabled) {
           _logger.d(
-              'onLatencyProgress: latency=$latency, percent=$percent, jitter=$jitter');
+              'LATENCY PROGRESS: percent=$percent, latency=$latency, jitter=$jitter');
         }
         callbacks.item2(percent, latency, jitter);
         break;
       case ListenerEnum.cancel:
         if (isLogEnabled) {
-          _logger.d('onLatencyCancel');
+          _logger.d('LATENCY CANCEL');
         }
         callbacks.item4();
         methodChannel.invokeMethod("cancelListening", args["id"]);
@@ -106,6 +106,9 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   void _handleDownloadTesting(int type, Map<dynamic, dynamic> args) {
+    if (isLogEnabled) {
+      _logger.d('DOWNLOAD EVENT: type=$type args=$args');
+    }
     switch (ListenerEnum.values[type]) {
       case ListenerEnum.complete:
         _onDownloadComplete(args);
@@ -123,6 +126,9 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   void _handleUploadTesting(int type, Map<dynamic, dynamic> args) {
+    if (isLogEnabled) {
+      _logger.d('UPLOAD EVENT: type=$type args=$args');
+    }
     switch (ListenerEnum.values[type]) {
       case ListenerEnum.complete:
         _onUploadComplete(args);
@@ -140,53 +146,76 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   void _onDownloadComplete(Map<dynamic, dynamic> args) {
+    if (isLogEnabled) _logger.d('DOWNLOAD COMPLETE EVENT RECEIVED');
+
     downloadSteps++;
     downloadRate += int.parse((args['transferRate'] ~/ 1000).toString());
-    if (isLogEnabled) {
-      _logger.d('download steps is $downloadSteps}');
-      _logger.d('download rate is $downloadRate}');
-    }
+
     double average = (downloadRate ~/ downloadSteps).toDouble();
     average /= 1000;
-    callbacksById[args["id"].toString()]!.item3(average, SpeedUnit.mbps);
+
+    // Call the "done" callback
+    final cb = callbacksById[args["id"].toString()];
+    if (cb == null) {
+      if (isLogEnabled) _logger.w('No callback found for download complete!');
+    } else {
+      if (isLogEnabled)
+        _logger.d('Calling download done callback with $average Mbps');
+      cb.item3(average, SpeedUnit.mbps);
+    }
+
+    // Reset counters
     downloadSteps = 0;
     downloadRate = 0;
-    methodChannel.invokeMethod("cancelListening", args["id"]);
-    callbacksById.remove(args["id"].toString());
+
+    // *** CHANGE START ***
+    // Do NOT call cancelListening here. Just log that we are done.
+    // Do NOT remove callback now. Let the UI handle that.
+    if (isLogEnabled)
+      _logger.d('Download test done. Not removing callbacks yet.');
+    // *** CHANGE END ***
   }
 
   void _onDownloadError(Map<dynamic, dynamic> args) {
-    if (isLogEnabled) {
-      _logger.d('onError : ${args["speedTestError"]}');
-      _logger.d('onError : ${args["errorMessage"]}');
+    if (isLogEnabled) _logger.d('DOWNLOAD ERROR EVENT RECEIVED');
+    final errorMsg = (args['errorMessage'] as String?) ??
+        (args['speedTestError'] as String?) ??
+        'Unknown error';
+
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      cb.item1(errorMsg, '');
     }
-    callbacksById[args["id"].toString()]!.item1(
-        args['errorMessage'] as String, args['speedTestError'] as String);
     downloadSteps = 0;
     downloadRate = 0;
+
+    // For error, we still cancel
+    if (isLogEnabled) _logger.d('Download error. Calling cancelListening.');
     methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
   void _onDownloadProgress(Map<dynamic, dynamic> args) {
     double rate = ((args['transferRate'] as double) ~/ 1000).toDouble();
-    if (isLogEnabled) {
-      _logger.d('rate is $rate');
-      _logger.d('latency is ${args['latency']}');
-      _logger.d('jitter is ${args['jitter']}');
-    }
+    if (isLogEnabled) _logger.d('DOWNLOAD PROGRESS: rate=$rate');
     if (rate != 0) downloadSteps++;
     downloadRate += rate.toInt();
     rate /= 1000;
-    callbacksById[args["id"].toString()]!
-        .item2(args['percent'] as double, rate, SpeedUnit.mbps);
+
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      cb.item2(args['percent'] as double, rate, SpeedUnit.mbps);
+    } else {
+      if (isLogEnabled) _logger.w('No callback found for download progress!');
+    }
   }
 
   void _onDownloadCancel(Map<dynamic, dynamic> args) {
-    if (isLogEnabled) {
-      _logger.d('onCancel : ${args["id"]}');
+    if (isLogEnabled) _logger.d('DOWNLOAD CANCEL EVENT RECEIVED');
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      cb.item4();
     }
-    callbacksById[args["id"].toString()]!.item4();
     downloadSteps = 0;
     downloadRate = 0;
     methodChannel.invokeMethod("cancelListening", args["id"]);
@@ -194,52 +223,68 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   void _onUploadComplete(Map<dynamic, dynamic> args) {
-    if (isLogEnabled) {
-      _logger.d('onComplete : ${args['transferRate']}');
-    }
+    if (isLogEnabled) _logger.d('UPLOAD COMPLETE EVENT RECEIVED');
+
     uploadSteps++;
     uploadRate += int.parse((args['transferRate'] ~/ 1000).toString());
-    if (isLogEnabled) {
-      _logger.d('upload steps is $uploadSteps}');
-      _logger.d('upload rate is $uploadRate}');
-    }
+
     double average = (uploadRate ~/ uploadSteps).toDouble();
     average /= 1000;
-    callbacksById[args["id"].toString()]!.item3(average, SpeedUnit.mbps);
+
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      if (isLogEnabled)
+        _logger.d('Calling upload done callback with $average Mbps');
+      cb.item3(average, SpeedUnit.mbps);
+    } else {
+      if (isLogEnabled) _logger.w('No callback found for upload complete!');
+    }
+
     uploadSteps = 0;
     uploadRate = 0;
-    methodChannel.invokeMethod("cancelListening", args["id"]);
-    callbacksById.remove(args["id"].toString());
+
+    // *** CHANGE START ***
+    // Do NOT call cancelListening here or remove callback immediately.
+    if (isLogEnabled)
+      _logger.d('Upload test done. Not removing callbacks yet.');
+    // *** CHANGE END ***
   }
 
   void _onUploadError(Map<dynamic, dynamic> args) {
-    if (isLogEnabled) {
-      _logger.d('onError : ${args["speedTestError"]}');
-      _logger.d('onError : ${args["errorMessage"]}');
+    if (isLogEnabled) _logger.d('UPLOAD ERROR EVENT RECEIVED');
+    final errorMsg = (args['errorMessage'] as String?) ??
+        (args['speedTestError'] as String?) ??
+        'Unknown error';
+
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      cb.item1(errorMsg, '');
     }
-    callbacksById[args["id"].toString()]!.item1(
-        args['errorMessage'] as String, args['speedTestError'] as String);
+
     methodChannel.invokeMethod("cancelListening", args["id"]);
     callbacksById.remove(args["id"].toString());
   }
 
   void _onUploadProgress(Map<dynamic, dynamic> args) {
     double rate = ((args['transferRate'] as double) ~/ 1000).toDouble();
-    if (isLogEnabled) {
-      _logger.d('rate is $rate');
-    }
+    if (isLogEnabled) _logger.d('UPLOAD PROGRESS: rate=$rate');
     if (rate != 0) uploadSteps++;
     uploadRate += rate.toInt();
     rate /= 1000.0;
-    callbacksById[args["id"].toString()]!
-        .item2(args['percent'] as double, rate, SpeedUnit.mbps);
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      cb.item2(args['percent'] as double, rate, SpeedUnit.mbps);
+    } else {
+      if (isLogEnabled) _logger.w('No callback found for upload progress!');
+    }
   }
 
   void _onUploadCancel(Map<dynamic, dynamic> args) {
-    if (isLogEnabled) {
-      _logger.d('onCancel : ${args["id"]}');
+    if (isLogEnabled) _logger.d('UPLOAD CANCEL EVENT RECEIVED');
+    final cb = callbacksById[args["id"].toString()];
+    if (cb != null) {
+      cb.item4();
     }
-    callbacksById[args["id"].toString()]!.item4();
     downloadSteps = 0;
     downloadRate = 0;
     methodChannel.invokeMethod("cancelListening", args["id"]);
@@ -257,19 +302,17 @@ class MethodChannelFlutterInternetSpeedTest
     int currentListenerId = callbacksEnum.index;
 
     if (isLogEnabled) {
-      _logger.d('test $currentListenerId');
+      _logger.d('startDownloadOrUploadListening: test $currentListenerId');
     }
     callbacksById[currentListenerId.toString()] = callback;
-    await methodChannel.invokeMethod(
-      "startListening",
-      {
-        'id': currentListenerId,
-        'args': args,
-        'testServer': testServer,
-        'fileSize': fileSize,
-      },
-    );
+    await methodChannel.invokeMethod("startListening", {
+      'id': currentListenerId,
+      'args': args,
+      'testServer': testServer,
+      'fileSize': fileSize,
+    });
     return () {
+      if (isLogEnabled) _logger.d('Manually canceling test $currentListenerId');
       methodChannel.invokeMethod("cancelListening", currentListenerId);
       callbacksById.remove(currentListenerId.toString());
     };
@@ -285,29 +328,25 @@ class MethodChannelFlutterInternetSpeedTest
     int currentListenerId = callbacksEnum.index;
 
     if (isLogEnabled) {
-      _logger.d('test $currentListenerId');
+      _logger.d('startLatencyListening: test $currentListenerId');
     }
     latencyCallbacksById[currentListenerId.toString()] = callback;
-    await methodChannel.invokeMethod(
-      "startListening",
-      {
-        'id': currentListenerId,
-        'testServer': testServer,
-      },
-    );
+    await methodChannel.invokeMethod("startListening", {
+      'id': currentListenerId,
+      'testServer': testServer,
+    });
     return () {
+      if (isLogEnabled)
+        _logger.d('Manually canceling latency test $currentListenerId');
       methodChannel.invokeMethod("cancelListening", currentListenerId);
       latencyCallbacksById.remove(currentListenerId.toString());
     };
   }
 
   Future<void> _toggleLog(bool value) async {
-    await methodChannel.invokeMethod(
-      "toggleLog",
-      {
-        'value': value,
-      },
-    );
+    await methodChannel.invokeMethod("toggleLog", {
+      'value': value,
+    });
   }
 
   @override
@@ -326,33 +365,37 @@ class MethodChannelFlutterInternetSpeedTest
   }
 
   @override
-  Future<CancelListening> startDownloadTesting(
-      {required DoneCallback onDone,
-      required ProgressCallback onProgress,
-      required ErrorCallback onError,
-      required CancelCallback onCancel,
-      required fileSize,
-      required String testServer}) async {
+  Future<CancelListening> startDownloadTesting({
+    required DoneCallback onDone,
+    required ProgressCallback onProgress,
+    required ErrorCallback onError,
+    required CancelCallback onCancel,
+    required fileSize,
+    required String testServer,
+  }) async {
     return await _startDownloadOrUploadListening(
-        Tuple4(onError, onProgress, onDone, onCancel),
-        CallbacksEnum.startDownLoadTesting,
-        testServer,
-        fileSize: fileSize);
+      Tuple4(onError, onProgress, onDone, onCancel),
+      CallbacksEnum.startDownLoadTesting,
+      testServer,
+      fileSize: fileSize,
+    );
   }
 
   @override
-  Future<CancelListening> startUploadTesting(
-      {required DoneCallback onDone,
-      required ProgressCallback onProgress,
-      required ErrorCallback onError,
-      required CancelCallback onCancel,
-      required int fileSize,
-      required String testServer}) async {
+  Future<CancelListening> startUploadTesting({
+    required DoneCallback onDone,
+    required ProgressCallback onProgress,
+    required ErrorCallback onError,
+    required CancelCallback onCancel,
+    required int fileSize,
+    required String testServer,
+  }) async {
     return await _startDownloadOrUploadListening(
-        Tuple4(onError, onProgress, onDone, onCancel),
-        CallbacksEnum.startUploadTesting,
-        testServer,
-        fileSize: fileSize);
+      Tuple4(onError, onProgress, onDone, onCancel),
+      CallbacksEnum.startUploadTesting,
+      testServer,
+      fileSize: fileSize,
+    );
   }
 
   @override
@@ -388,11 +431,9 @@ class MethodChannelFlutterInternetSpeedTest
         var serverSelectionResponse = ServerSelectionResponse.fromJson(
             json.decode(serverResponse.body) as Map<String, dynamic>);
         _client = serverSelectionResponse.client;
-        // Apply additional configurations if provided
-        if (additionalConfigs != null) {
+        if (additionalConfigs != null && isLogEnabled) {
           additionalConfigs.forEach((key, value) {
             _logger.d('Config $key: $value');
-            // Doesn't apply to this implementation
           });
         }
 
@@ -429,6 +470,7 @@ class MethodChannelFlutterInternetSpeedTest
 
   @override
   Future<bool> cancelTest() async {
+    if (isLogEnabled) _logger.d('cancelTest called from Dart side.');
     var result = false;
     try {
       result = await methodChannel.invokeMethod("cancelTest", [
@@ -436,6 +478,7 @@ class MethodChannelFlutterInternetSpeedTest
         CallbacksEnum.startUploadTesting.index,
         CallbacksEnum.startLatencyTesting.index,
       ]) as bool;
+      if (isLogEnabled) _logger.d('cancelTest result: $result');
     } on PlatformException {
       result = false;
     }
@@ -444,6 +487,7 @@ class MethodChannelFlutterInternetSpeedTest
 
   @override
   Future<String?> getPlatformVersion() async {
+    if (isLogEnabled) _logger.d('getPlatformVersion called.');
     final version =
         await methodChannel.invokeMethod<String>('getPlatformVersion');
     return version;
@@ -451,20 +495,15 @@ class MethodChannelFlutterInternetSpeedTest
 
   @override
   Future<void> resetTest({bool softReset = false}) async {
-    // Reset client information
+    if (isLogEnabled) _logger.d('resetTest called, softReset=$softReset');
     _client = null;
-
-    // Clear callbacks
     callbacksById.clear();
     latencyCallbacksById.clear();
-
-    // Reset download/upload state
     downloadSteps = 0;
     downloadRate = 0;
     uploadSteps = 0;
     uploadRate = 0;
 
-    // Optionally reset logging state
     if (!softReset) {
       logEnabled = false;
     }

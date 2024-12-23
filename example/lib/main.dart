@@ -32,17 +32,23 @@ class _MyAppState extends State<MyApp> {
 
   String _unitText = 'Mbps';
 
-  // Add variables for latency and jitter
   double _latency = 0;
   double _jitter = 0;
-  // ignore: unused_field
   String _latencyProgress = '0';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       reset();
+    });
+  }
+
+  void _updateUIOnCompletion() {
+    // Called when a test completes to ensure UI updates even if onCompleted isn't fired.
+    // If tests are done, show final results and ensure _testInProgress = false.
+    setState(() {
+      _testInProgress = false;
     });
   }
 
@@ -55,7 +61,6 @@ class _MyAppState extends State<MyApp> {
         ),
         body: Center(
           child: SingleChildScrollView(
-            // Added SingleChildScrollView to prevent overflow
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
@@ -75,9 +80,7 @@ class _MyAppState extends State<MyApp> {
                     Text('Jitter: $_jitter ms'),
                   ],
                 ),
-                const SizedBox(
-                  height: 32.0,
-                ),
+                const SizedBox(height: 32.0),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -95,9 +98,7 @@ class _MyAppState extends State<MyApp> {
                           'Time taken: ${(_downloadCompletionTime / 1000).toStringAsFixed(2)} sec(s)'),
                   ],
                 ),
-                const SizedBox(
-                  height: 32.0,
-                ),
+                const SizedBox(height: 32.0),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -115,9 +116,7 @@ class _MyAppState extends State<MyApp> {
                           'Time taken: ${(_uploadCompletionTime / 1000).toStringAsFixed(2)} sec(s)'),
                   ],
                 ),
-                const SizedBox(
-                  height: 32.0,
-                ),
+                const SizedBox(height: 32.0),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: Text(_isServerSelectionInProgress
@@ -129,12 +128,14 @@ class _MyAppState extends State<MyApp> {
                     child: const Text('Start Testing'),
                     onPressed: () async {
                       reset();
+                      if (kDebugMode) {
+                        print('Starting the test...');
+                      }
                       await internetSpeedTest.startTesting(
-                        downloadTestServer:
-                            kIsWeb ? 'http://localhost:8080' : null,
-                        uploadTestServer:
-                            kIsWeb ? 'http://localhost:8080' : null,
                         onGetIPDone: (Client? client) {
+                          if (kDebugMode) {
+                            print('onGetIPDone: $client');
+                          }
                           setState(() {
                             if (client != null) {
                               _ip = client.ip;
@@ -143,75 +144,87 @@ class _MyAppState extends State<MyApp> {
                             }
                           });
                         },
+                        downloadTestServer:
+                            kIsWeb ? 'http://localhost:8080' : null,
+                        uploadTestServer:
+                            kIsWeb ? 'http://localhost:8080' : null,
                         onStarted: () {
+                          if (kDebugMode) {
+                            print('Test started');
+                          }
                           setState(() => _testInProgress = true);
                         },
                         onCompleted: (TestResult download, TestResult upload) {
                           if (kDebugMode) {
                             print(
-                                'Download rate: ${download.value}, Upload rate: ${upload.value}');
+                                'onCompleted: Download=${download.value} ${download.unit}, Upload=${upload.value} ${upload.unit}');
                           }
-                          if (download.hasRan()) {
-                            setState(() {
-                              _downloadRate = download.value;
+                          setState(() {
+                            // If onCompleted is triggered, show final results
+                            if (download.hasRan()) {
                               _downloadRate = double.parse(
-                                  _downloadRate.toStringAsFixed(2));
+                                  download.value.toStringAsFixed(2));
                               _unitText = download.unit == SpeedUnit.kbps
                                   ? 'Kbps'
                                   : 'Mbps';
                               _downloadProgress = '100';
                               _downloadCompletionTime =
                                   download.durationInMillis;
-                            });
-                          }
-                          if (upload.hasRan()) {
-                            setState(() {
-                              _uploadRate = upload.value;
+                            }
+
+                            if (upload.hasRan()) {
                               _uploadRate =
-                                  double.parse(_uploadRate.toStringAsFixed(2));
+                                  double.parse(upload.value.toStringAsFixed(2));
                               _unitText = upload.unit == SpeedUnit.kbps
                                   ? 'Kbps'
                                   : 'Mbps';
                               _uploadProgress = '100';
                               _uploadCompletionTime = upload.durationInMillis;
-                              _testInProgress = false;
-                            });
-                          }
+                            }
+
+                            _testInProgress = false;
+                          });
                         },
                         onProgress: (double percent, TestResult data) {
                           if (kDebugMode) {
                             print(
-                                'Transfer rate: ${data.value}, Percent: $percent');
+                                'onProgress: ${data.type} rate=${data.value} ${data.unit}, percent=$percent');
                           }
                           setState(() {
                             _unitText =
                                 data.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
                             if (data.type == TestType.download) {
-                              _downloadRate = data.value;
+                              _downloadRate =
+                                  double.parse(data.value.toStringAsFixed(2));
                               _downloadProgress = percent.toStringAsFixed(1);
-                              _downloadRate = double.parse(
-                                  _downloadRate.toStringAsFixed(2));
                             } else if (data.type == TestType.upload) {
-                              _uploadRate = data.value;
-                              _uploadProgress = percent.toStringAsFixed(1);
                               _uploadRate =
-                                  double.parse(_uploadRate.toStringAsFixed(2));
+                                  double.parse(data.value.toStringAsFixed(2));
+                              _uploadProgress = percent.toStringAsFixed(1);
                             }
                           });
                         },
                         onError: (String errorMessage, String speedTestError) {
                           if (kDebugMode) {
-                            print(
-                                'Error Message: $errorMessage, SpeedTestError: $speedTestError');
+                            print('onError: $errorMessage $speedTestError');
                           }
+                          setState(() {
+                            _testInProgress = false;
+                          });
                           reset();
                         },
                         onDefaultServerSelectionInProgress: () {
+                          if (kDebugMode) {
+                            print('Selecting best server...');
+                          }
                           setState(() {
                             _isServerSelectionInProgress = true;
                           });
                         },
                         onDefaultServerSelectionDone: (Client? client) {
+                          if (kDebugMode) {
+                            print('Default server selected: $client');
+                          }
                           setState(() {
                             _isServerSelectionInProgress = false;
                             _ip = client?.ip;
@@ -220,55 +233,72 @@ class _MyAppState extends State<MyApp> {
                           });
                         },
                         onDownloadComplete: (TestResult data) {
+                          if (kDebugMode) {
+                            print(
+                                'onDownloadComplete: ${data.value} ${data.unit}, Time: ${data.durationInMillis}ms');
+                          }
                           setState(() {
-                            _downloadRate = data.value;
+                            _downloadRate =
+                                double.parse(data.value.toStringAsFixed(2));
                             _unitText =
                                 data.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
                             _downloadCompletionTime = data.durationInMillis;
-                            _downloadRate =
-                                double.parse(_downloadRate.toStringAsFixed(2));
+                            _downloadProgress = '100';
+                            // UI might need to end test if upload won't run
+                            // If this is a single test scenario, finalize UI here:
+                            //_testInProgress = false; // Uncomment if needed
                           });
                         },
                         onUploadComplete: (TestResult data) {
+                          if (kDebugMode) {
+                            print(
+                                'onUploadComplete: ${data.value} ${data.unit}, Time: ${data.durationInMillis}ms');
+                          }
                           setState(() {
-                            _uploadRate = data.value;
+                            _uploadRate =
+                                double.parse(data.value.toStringAsFixed(2));
                             _unitText =
                                 data.unit == SpeedUnit.kbps ? 'Kbps' : 'Mbps';
                             _uploadCompletionTime = data.durationInMillis;
-                            _uploadRate =
-                                double.parse(_uploadRate.toStringAsFixed(1));
+                            _uploadProgress = '100';
+                            // If tests won't trigger onCompleted, finalize UI here:
+                            //_testInProgress = false; // Uncomment if needed
                           });
                         },
                         onPingTestDone: (TestResult data) {
                           if (kDebugMode) {
                             print(
-                                'Ping test completed: Latency ${data.value}, Jitter ${data.jitter}');
+                                'onPingTestDone: Latency ${data.value}, Jitter ${data.jitter}');
                           }
                           setState(() {
-                            _latency = data.value;
-                            _jitter = data.jitter ?? 0;
-                            _latencyProgress = '100';
                             _latency =
-                                double.parse(_latency.toStringAsFixed(2));
-                            _jitter = double.parse(_jitter.toStringAsFixed(2));
+                                double.parse(data.value.toStringAsFixed(2));
+                            _jitter = double.parse(
+                                (data.jitter ?? 0).toStringAsFixed(2));
+                            _latencyProgress = '100';
                           });
                         },
                         onPingTestInProgress:
                             (double percent, TestResult data) {
                           if (kDebugMode) {
                             print(
-                                'Ping test progress: $percent%, Latency ${data.value}');
+                                'onPingTestInProgress: $percent%, Latency ${data.value}, Jitter: ${data.jitter}');
                           }
                           setState(() {
-                            _latency = data.value;
+                            _latency =
+                                double.parse(data.value.toStringAsFixed(2));
+                            _jitter = double.parse(
+                                (data.jitter ?? 0).toStringAsFixed(2));
                             _latencyProgress = percent.toStringAsFixed(1);
-                            _jitter = data.jitter ?? 0;
-                            _latency = double.parse(_latency
-                                .toStringAsFixed(2)); // One decimal place
-                            _jitter = double.parse(_jitter.toStringAsFixed(2));
                           });
                         },
                         onCancel: () {
+                          if (kDebugMode) {
+                            print('Test cancelled');
+                          }
+                          setState(() {
+                            _testInProgress = false;
+                          });
                           reset();
                         },
                       );
@@ -279,7 +309,16 @@ class _MyAppState extends State<MyApp> {
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: TextButton.icon(
-                      onPressed: () => internetSpeedTest.cancelTest(),
+                      onPressed: () {
+                        if (kDebugMode) {
+                          print('Cancel button pressed');
+                        }
+                        internetSpeedTest.cancelTest().then((_) {
+                          setState(() {
+                            _testInProgress = false;
+                          });
+                        });
+                      },
                       icon: const Icon(Icons.cancel_rounded),
                       label: const Text('Cancel'),
                     ),
@@ -294,6 +333,9 @@ class _MyAppState extends State<MyApp> {
   }
 
   void reset() {
+    if (kDebugMode) {
+      print('resetTest called');
+    }
     setState(() {
       _testInProgress = false;
       _downloadRate = 0;
@@ -310,7 +352,6 @@ class _MyAppState extends State<MyApp> {
 
       _unitText = 'Mbps';
 
-      // Reset latency variables
       _latency = 0;
       _jitter = 0;
       _latencyProgress = '0';

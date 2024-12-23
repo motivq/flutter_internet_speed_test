@@ -5,11 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="8e1267c8-8a0d-4a0e-930e-4ce11ec001de" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt" beforeDir="false" afterPath="$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/main.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test_libre.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/src/flutter_internet_speed_test_libre.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/ios/Podfile.lock" beforeDir="false" afterPath="$PROJECT_DIR$/example/ios/Podfile.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ios/Classes/FlutterInternetSpeedTestPlugin.swift" beforeDir="false" afterPath="$PROJECT_DIR$/ios/Classes/FlutterInternetSpeedTestPlugin.swift" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ios/Classes/Network/DownloadService/CustomHostDownloadService.swift" beforeDir="false" afterPath="$PROJECT_DIR$/ios/Classes/Network/DownloadService/CustomHostDownloadService.swift" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ios/Classes/Network/UploadService/CustomHostUploadService.swift" beforeDir="false" afterPath="$PROJECT_DIR$/ios/Classes/Network/UploadService/CustomHostUploadService.swift" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ios/Classes/SpeedTest.swift" beforeDir="false" afterPath="$PROJECT_DIR$/ios/Classes/SpeedTest.swift" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -42,23 +45,24 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "DEBUGGABLE_DEVICE": "Medium_Phone_API_35_HW [emulator-5556]",
+    "DEBUGGABLE_DEVICE": "Pixel_5_API_33 [emulator-5554]",
     "DEBUGGABLE_PROCESS": "com.shaz.plugin.fist.flutter_internet_speed_test_example",
     "DEBUGGER_ID": "Java",
-    "Flutter.main.dart.executor": "Debug",
+    "Flutter.main.dart.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "SHOW_ALL_PROCESSES": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "com.google.services.firebase.aqiPopupShown": "true",
     "dart.analysis.tool.window.visible": "false",
-    "git-widget-placeholder": "add-web",
+    "git-widget-placeholder": "ios",
     "ignore.virus.scanning.warn.message": "true",
     "io.flutter.reload.alreadyRun": "true",
     "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "C:/Users/gmena/dev/internet_speed_test",
+    "last_opened_file_path": "/Users/reaper/go/src/github.com/motivq/flutter_internet_speed_test",
     "run.code.analysis.last.selected.profile": "pProject Default",
     "settings.editor.selected.configurable": "reference.settingsdialog.project.gradle",
     "show.migrate.to.gradle.popup": "false"
@@ -86,8 +90,23 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="kotlin-line">
           <url>file://$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt</url>
-          <line>305</line>
-          <option name="timeStamp" value="7" />
+          <line>442</line>
+          <option name="timeStamp" value="8" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="kotlin-line">
+          <url>file://$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt</url>
+          <line>204</line>
+          <option name="timeStamp" value="9" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="kotlin-line">
+          <url>file://$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt</url>
+          <line>202</line>
+          <option name="timeStamp" value="10" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="kotlin-line">
+          <url>file://$PROJECT_DIR$/android/src/main/kotlin/com/shaz/plugin/fist/flutter_internet_speed_test/FlutterInternetSpeedTestPlugin.kt</url>
+          <line>160</line>
+          <option name="timeStamp" value="11" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
