@@ -2,21 +2,21 @@ import Flutter
 import UIKit
 
 public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
-    let DEFAULT_FILE_SIZE = 10485760
+    let DEFAULT_FILE_SIZE = 10_485_760
     let DEFAULT_TEST_TIMEOUT = 20000
 
     var callbackById: [Int: () -> Void] = [:]
 
     private var cancellationFlags = [Int: Bool]()
     private var speedTests = [Int: SpeedTest]()
-    private var lastUpdateTimeById: [Int: Date] = [:] // For throttling
+    private var lastUpdateTimeById: [Int: Date] = [:]  // For throttling
 
     static var channel: FlutterMethodChannel!
 
     private let logger = Logger()
 
     // Throttling properties
-    private let updateThrottleInterval: TimeInterval = 0.1 // 100 ms
+    private let updateThrottleInterval: TimeInterval = 0.1  // 100 ms
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         channel = FlutterMethodChannel(
@@ -39,9 +39,12 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
 
     private func mapToCall(result: FlutterResult, arguments: Any?) {
         guard let argsMap = arguments as? [String: Any],
-              let testId = argsMap["id"] as? Int else {
+            let testId = argsMap["id"] as? Int
+        else {
             logger.printLog(message: "Invalid arguments for startListening")
-            result(FlutterError(code: "INVALID_ARGS", message: "Missing 'id' in arguments", details: nil))
+            result(
+                FlutterError(
+                    code: "INVALID_ARGS", message: "Missing 'id' in arguments", details: nil))
             return
         }
 
@@ -53,7 +56,10 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
 
         guard let testServer = argsMap["testServer"] as? String else {
             logger.printLog(message: "Missing testServer argument.")
-            result(FlutterError(code: "INVALID_ARGS", message: "Missing 'testServer' in arguments", details: nil))
+            result(
+                FlutterError(
+                    code: "INVALID_ARGS", message: "Missing 'testServer' in arguments", details: nil
+                ))
             return
         }
 
@@ -72,7 +78,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                 testServer: testServer, fileSize: fileSize)
         default:
             logger.printLog(message: "Invalid test id: \(testId)")
-            result(FlutterError(code: "INVALID_ID", message: "Invalid test id provided", details: nil))
+            result(
+                FlutterError(code: "INVALID_ID", message: "Invalid test id provided", details: nil))
         }
     }
 
@@ -122,8 +129,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
 
     func startListening(
         args: Any, flutterResult: FlutterResult, methodName: String, testServer: String,
-        fileSize: Int)
-    {
+        fileSize: Int
+    ) {
         let currentListenerId = args as! Int
         logger.printLog(message: "Method name is \(methodName)")
         logger.printLog(message: "id is \(currentListenerId)")
@@ -157,23 +164,26 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                                 argsMap["percent"] = 100
                                 argsMap["type"] = 0
                                 DispatchQueue.main.async {
-                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                                        "callListener", arguments: argsMap)
                                     self.cleanupListener(id: currentListenerId)
                                 }
                             case .error(let error):
-                                self.logger.printLog(message: "Error is \(error.localizedDescription)")
+                                self.logger.printLog(
+                                    message: "Error is \(error.localizedDescription)")
                                 var argsMap: [String: Any] = [:]
                                 argsMap["id"] = currentListenerId
                                 argsMap["speedTestError"] = error.localizedDescription
                                 argsMap["type"] = 1
                                 DispatchQueue.main.async {
-                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                                        "callListener", arguments: argsMap)
                                     self.cleanupListener(id: currentListenerId)
                                 }
                             }
                         }
                     )
-                    // *** CHANGE END ***
+                // *** CHANGE END ***
                 case "startUploadTesting":
                     st.runUploadTest(
                         for: URL(string: testServer)!, size: fileSize,
@@ -195,30 +205,33 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                                 argsMap["percent"] = 100
                                 argsMap["type"] = 0
                                 DispatchQueue.main.async {
-                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                                        "callListener", arguments: argsMap)
                                     self.cleanupListener(id: currentListenerId)
                                 }
                             case .error(let error):
-                                self.logger.printLog(message: "Error is \(error.localizedDescription)")
+                                self.logger.printLog(
+                                    message: "Error is \(error.localizedDescription)")
                                 var argsMap: [String: Any] = [:]
                                 argsMap["id"] = currentListenerId
                                 argsMap["speedTestError"] = error.localizedDescription
                                 argsMap["type"] = 1
                                 DispatchQueue.main.async {
-                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                                    SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                                        "callListener", arguments: argsMap)
                                     self.cleanupListener(id: currentListenerId)
                                 }
                             }
                         }
                     )
-                    
+
                 case "startLatencyTesting":
                     DispatchQueue.global(qos: .background).async {
                         self.runLatencyTest(
                             testServer: testServer,
                             listenerId: currentListenerId)
                     }
-                    
+
                 default:
                     self.logger.printLog(message: "Unknown methodName: \(methodName)")
                     DispatchQueue.main.async {
@@ -226,7 +239,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                         argsMap["id"] = currentListenerId
                         argsMap["speedTestError"] = "Unknown test method"
                         argsMap["type"] = 1
-                        SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                        SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                            "callListener", arguments: argsMap)
                         self.cleanupListener(id: currentListenerId)
                     }
                 }
@@ -243,14 +257,15 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
         let lastUpdate = lastUpdateTimeById[listenerId] ?? Date.distantPast
         if now.timeIntervalSince(lastUpdate) >= updateThrottleInterval {
             lastUpdateTimeById[listenerId] = now
-            
+
             var argsMap: [String: Any] = [:]
             argsMap["id"] = listenerId
             argsMap["transferRate"] = self.getSpeedInBytes(speed: speed)
             argsMap["percent"] = 50
             argsMap["type"] = type
             DispatchQueue.main.async {
-                SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                    "callListener", arguments: argsMap)
             }
         }
     }
@@ -274,7 +289,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                 argsMap["id"] = listenerId
                 argsMap["speedTestError"] = "Invalid URL"
                 argsMap["type"] = 1
-                SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                    "callListener", arguments: argsMap)
                 self.cleanupListener(id: listenerId)
             }
             return
@@ -282,16 +298,17 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
 
         let host = url.host ?? ""
         let port = url.port ?? (url.scheme == "https" ? 443 : 80)
-        let totalPings = 100
+        let totalPings = 10
         var latencyMeasurements = [Double]()
 
-        for currentPing in 1 ... totalPings {
+        for currentPing in 1...totalPings {
             if cancellationFlags[listenerId] == true {
                 DispatchQueue.main.async {
                     var argsMap: [String: Any] = [:]
                     argsMap["id"] = listenerId
                     argsMap["type"] = 3
-                    SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                    SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                        "callListener", arguments: argsMap)
                     self.cleanupListener(id: listenerId)
                 }
                 return
@@ -307,7 +324,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                     argsMap["id"] = listenerId
                     argsMap["speedTestError"] = "Connection failed"
                     argsMap["type"] = 1
-                    SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                    SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                        "callListener", arguments: argsMap)
                     self.cleanupListener(id: listenerId)
                 }
                 return
@@ -326,7 +344,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                 argsMap["latency"] = latency
                 argsMap["jitter"] = jitter
                 argsMap["type"] = 2
-                SwiftInternetSpeedTestPlugin.channel.invokeMethod("callListener", arguments: argsMap)
+                SwiftInternetSpeedTestPlugin.channel.invokeMethod(
+                    "callListener", arguments: argsMap)
             }
 
             Thread.sleep(forTimeInterval: 0.1)
@@ -358,7 +377,8 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
                 nil, host as CFString, UInt32(port), &readStream, &writeStream)
 
             if let inputStream = readStream?.takeRetainedValue(),
-               let outputStream = writeStream?.takeRetainedValue() {
+                let outputStream = writeStream?.takeRetainedValue()
+            {
                 CFReadStreamSetProperty(
                     inputStream,
                     CFStreamPropertyKey(rawValue: kCFStreamPropertyShouldCloseNativeSocket),
@@ -391,7 +411,7 @@ public class SwiftInternetSpeedTestPlugin: NSObject, FlutterPlugin {
             return 0.0
         }
         var differences = [Double]()
-        for i in 1 ..< latencies.count {
+        for i in 1..<latencies.count {
             differences.append(abs(latencies[i] - latencies[i - 1]))
         }
         return differences.reduce(0, +) / Double(differences.count)

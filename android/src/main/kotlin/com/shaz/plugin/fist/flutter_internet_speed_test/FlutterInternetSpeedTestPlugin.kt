@@ -2,6 +2,7 @@ package com.shaz.plugin.fist.flutter_internet_speed_test
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import fr.bmartel.speedtest.SpeedTestReport
 import fr.bmartel.speedtest.SpeedTestSocket
 import fr.bmartel.speedtest.inter.IRepeatListener
@@ -13,13 +14,11 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.Executors
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** FlutterInternetSpeedTestPlugin */
@@ -46,10 +45,14 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
         methodChannel =
             MethodChannel(flutterPluginBinding.binaryMessenger, "com.shaz.plugin.fist/method")
         methodChannel.setMethodCallHandler(this)
+
+        // Enable logger if needed:
+        logger.enabled = false
+        logger.print("Plugin attached to engine.")
     }
 
-    override fun onMethodCall(call: MethodCall, result: Result) {
-        print("FlutterInternetSpeedTestPlugin: onMethodCall: ${call.method}")
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        logger.print("onMethodCall: ${call.method}, arguments: ${call.arguments}")
         when (call.method) {
             "startListening" -> mapToCall(result, call.arguments)
             "cancelListening" -> cancelListening(call.arguments, result)
@@ -63,51 +66,56 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
         activity = null
         applicationContext = null
         methodChannel.setMethodCallHandler(null)
+        logger.print("Plugin detached from engine.")
     }
 
     override fun onDetachedFromActivity() {
         activity = null
+        logger.print("Detached from activity.")
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
+        logger.print("Reattached to activity for config changes.")
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
+        logger.print("Attached to activity.")
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
         activity = null
+        logger.print("Detached from activity for config changes.")
     }
 
-    private fun mapToCall(result: Result, arguments: Any?) {
+    private fun mapToCall(result: MethodChannel.Result, arguments: Any?) {
+        logger.print("mapToCall with arguments: $arguments")
         val argsMap = arguments as Map<*, *>
 
         val fileSize =
             if (argsMap.containsKey("fileSize")) argsMap["fileSize"] as Int else defaultFileSizeInBytes
-        when (val args = argsMap["id"] as Int) {
-            CallbacksEnum.START_DOWNLOAD_TESTING.ordinal -> startListening(
-                args,
-                result,
-                "startDownloadTesting",
-                argsMap["testServer"] as String,
-                fileSize
-            )
-            CallbacksEnum.START_UPLOAD_TESTING.ordinal -> startListening(
-                args,
-                result,
-                "startUploadTesting",
-                argsMap["testServer"] as String,
-                fileSize
-            )
-            CallbacksEnum.START_LATENCY_TESTING.ordinal -> startListening(
-                args,
-                result,
-                "startLatencyTesting",
-                argsMap["testServer"] as String,
-                fileSize
-            )
+        logger.print("fileSize: $fileSize Bytes")
+
+        val testServer = argsMap["testServer"] as? String
+        logger.print("testServer: $testServer")
+
+        val listenerId = argsMap["id"] as Int
+        logger.print("ListenerId: $listenerId")
+
+        when (listenerId) {
+            CallbacksEnum.START_DOWNLOAD_TESTING.ordinal -> {
+                logger.print("Method name is startDownloadTesting")
+                startListening(listenerId, result, "startDownloadTesting", testServer ?: "", fileSize)
+            }
+            CallbacksEnum.START_UPLOAD_TESTING.ordinal -> {
+                logger.print("Method name is startUploadTesting")
+                startListening(listenerId, result, "startUploadTesting", testServer ?: "", fileSize)
+            }
+            CallbacksEnum.START_LATENCY_TESTING.ordinal -> {
+                logger.print("Method name is startLatencyTesting")
+                startListening(listenerId, result, "startLatencyTesting", testServer ?: "", fileSize)
+            }
         }
     }
 
@@ -117,18 +125,19 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
         if (argsMap.containsKey("value")) {
             val logValue = argsMap["value"] as Boolean
             logger.enabled = logValue
+            logger.print("Logging toggled to: $logValue")
         }
     }
 
     private fun startListening(
-        args: Any,
-        result: Result,
+        args: Int,
+        result: MethodChannel.Result,
         methodName: String,
         testServer: String,
         fileSize: Int,
     ) {
-        logger.print("Test starting")
-        val currentListenerId = args as Int
+        logger.print("startListening: methodName=$methodName, testServer=$testServer, fileSize=$fileSize")
+        val currentListenerId = args
         val argsMap: MutableMap<String, Any> = mutableMapOf()
         argsMap["id"] = currentListenerId
 
@@ -140,13 +149,16 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
         }
 
         logger.print("Test listener Id: $currentListenerId")
+
         when (methodName) {
             "startDownloadTesting" -> {
                 val speedTestSocket = SpeedTestSocket()
                 activeSockets[currentListenerId] = speedTestSocket
+                logger.print("Starting download test with SpeedTestSocket, server: $testServer")
 
                 val listener = object : TestListener {
                     override fun onComplete(transferRate: Double) {
+                        logger.print("Download complete with rate: $transferRate bit/s")
                         argsMap["transferRate"] = transferRate
                         argsMap["type"] = ListenerEnum.COMPLETE.ordinal
                         activity?.runOnUiThread {
@@ -157,13 +169,11 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onError(speedTestError: String, errorMessage: String) {
-                        // *** CHANGE START ***
-                        // Ensure we have some non-empty error fields.
+                        logger.print("Download error: $speedTestError, $errorMessage")
                         val finalErrorMessage = if (errorMessage.isEmpty()) "Unknown error" else errorMessage
                         val finalSpeedTestError = if (speedTestError.isEmpty()) "Unknown error" else speedTestError
                         argsMap["speedTestError"] = finalSpeedTestError
                         argsMap["errorMessage"] = finalErrorMessage
-                        // *** CHANGE END ***
                         argsMap["type"] = ListenerEnum.ERROR.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
@@ -173,7 +183,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onProgress(percent: Double, transferRate: Double) {
-                        logger.print("onProgress $percent, $transferRate")
+                        logger.print("Download progress: $percent%, $transferRate bit/s")
                         argsMap["percent"] = percent
                         argsMap["transferRate"] = transferRate
                         argsMap["type"] = ListenerEnum.PROGRESS.ordinal
@@ -183,6 +193,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onCancel() {
+                        logger.print("Download test cancelled.")
                         argsMap["type"] = ListenerEnum.CANCEL.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
@@ -197,8 +208,11 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
             "startUploadTesting" -> {
                 val speedTestSocket = SpeedTestSocket()
                 activeSockets[currentListenerId] = speedTestSocket
+                logger.print("Starting upload test with SpeedTestSocket, server: $testServer")
+
                 val listener = object : TestListener {
                     override fun onComplete(transferRate: Double) {
+                        logger.print("Upload complete with rate: $transferRate bit/s")
                         argsMap["transferRate"] = transferRate
                         argsMap["type"] = ListenerEnum.COMPLETE.ordinal
                         activity?.runOnUiThread {
@@ -209,13 +223,11 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onError(speedTestError: String, errorMessage: String) {
-                        // *** CHANGE START ***
-                        // Ensure we have some non-empty error fields.
+                        logger.print("Upload error: $speedTestError, $errorMessage")
                         val finalErrorMessage = if (errorMessage.isEmpty()) "Unknown error" else errorMessage
                         val finalSpeedTestError = if (speedTestError.isEmpty()) "Unknown error" else speedTestError
                         argsMap["speedTestError"] = finalSpeedTestError
                         argsMap["errorMessage"] = finalErrorMessage
-                        // *** CHANGE END ***
                         argsMap["type"] = ListenerEnum.ERROR.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
@@ -225,7 +237,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onProgress(percent: Double, transferRate: Double) {
-                        logger.print("onProgress $percent, $transferRate")
+                        logger.print("Upload progress: $percent%, $transferRate bit/s")
                         argsMap["percent"] = percent
                         argsMap["transferRate"] = transferRate
                         argsMap["type"] = ListenerEnum.PROGRESS.ordinal
@@ -235,6 +247,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onCancel() {
+                        logger.print("Upload test cancelled.")
                         argsMap["type"] = ListenerEnum.CANCEL.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
@@ -247,11 +260,13 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                 }
             }
             "startLatencyTesting" -> {
-               val cancellationFlag = AtomicBoolean(false)
-               cancellationFlags[currentListenerId] = cancellationFlag
+                val cancellationFlag = AtomicBoolean(false)
+                cancellationFlags[currentListenerId] = cancellationFlag
+                logger.print("Starting latency test with server: $testServer")
 
                 val listener = object : LatencyTestListener  {
                     override fun onLatencyMeasured(percent: Double, latency: Double, jitter: Double) {
+                        logger.print("Latency progress: $percent%, latency: $latency ms, jitter: $jitter ms")
                         argsMap["percent"] = percent
                         argsMap["latency"] = latency
                         argsMap["jitter"] = jitter
@@ -262,6 +277,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onComplete(averageLatency: Double, jitter: Double) {
+                        logger.print("Latency test complete: average latency: $averageLatency ms, jitter: $jitter ms")
                         argsMap["latency"] = averageLatency
                         argsMap["jitter"] = jitter
                         argsMap["type"] = ListenerEnum.COMPLETE.ordinal
@@ -273,11 +289,9 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onError(errorMessage: String) {
-                        // *** CHANGE START ***
-                        // Ensure non-empty error message
+                        logger.print("Latency test error: $errorMessage")
                         val finalErrorMessage = if (errorMessage.isEmpty()) "Unknown error" else errorMessage
                         argsMap["errorMessage"] = finalErrorMessage
-                        // *** CHANGE END ***
                         argsMap["type"] = ListenerEnum.ERROR.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
@@ -287,6 +301,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                     }
 
                     override fun onCancel() {
+                        logger.print("Latency test cancelled.")
                         argsMap["type"] = ListenerEnum.CANCEL.ordinal
                         activity?.runOnUiThread {
                             methodChannel.invokeMethod("callListener", argsMap)
@@ -305,10 +320,13 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
     }
 
     private fun testLatency(testServer: String, testListener: LatencyTestListener, cancellationFlag: AtomicBoolean) {
+        logger.print("testLatency: testServer=$testServer")
         val latencyMeasurements = mutableListOf<Long>()
         val serverUrl = URL(testServer)
         val serverHost = serverUrl.host
         val serverPort = if (serverUrl.port != -1) serverUrl.port else serverUrl.defaultPort
+
+        logger.print("Latency test connecting to host=$serverHost, port=$serverPort")
 
         val totalPings = 100
         var currentPing = 0
@@ -318,9 +336,11 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                 val startTime = System.currentTimeMillis()
                 val socket = Socket()
                 val socketAddress = InetSocketAddress(serverHost, serverPort)
+                logger.print("Connecting to $serverHost:$serverPort")
                 socket.connect(socketAddress, 5000) // 5s timeout
                 val endTime = System.currentTimeMillis()
                 val latency = endTime - startTime
+                logger.print("Ping $currentPing: latency=$latency ms")
                 latencyMeasurements.add(latency)
                 socket.close()
 
@@ -333,6 +353,7 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                 Thread.sleep(100)
             } catch (e: Exception) {
                 e.printStackTrace()
+                logger.print("Latency test error: ${e.message}")
                 testListener.onError(e.message ?: "Unknown error")
                 break
             }
@@ -359,13 +380,14 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
         testServer: String,
         fileSize: Int
     ) {
+        logger.print("testUploadSpeed: testServer=$testServer, fileSize=$fileSize")
         speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
             override fun onCompletion(report: SpeedTestReport) {
                 // Do nothing here
             }
 
             override fun onError(speedTestError: SpeedTestError, errorMessage: String) {
-                logger.print("OnError: ${speedTestError.name}, $errorMessage")
+                logger.print("Upload OnError: ${speedTestError.name}, $errorMessage")
                 testListener.onError(errorMessage, speedTestError.name)
             }
 
@@ -373,6 +395,8 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                 // Do nothing here
             }
         })
+
+        logger.print("Starting upload repeat test with timeout=$defaultTestTimeoutInMillis and responseDelay=$defaultResponseDelayInMillis")
         speedTestSocket.startUploadRepeat(
             testServer,
             defaultTestTimeoutInMillis,
@@ -380,18 +404,17 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
             fileSize,
             object : IRepeatListener {
                 override fun onCompletion(report: SpeedTestReport) {
-                    logger.print("[COMPLETED] rate in bit/s   : " + report.transferRateBit)
+                    logger.print("[UPLOAD COMPLETED] rate in bit/s: ${report.transferRateBit}")
                     testListener.onComplete(report.transferRateBit.toDouble())
                 }
 
                 override fun onReport(report: SpeedTestReport) {
-                    logger.print("[PROGRESS] progress : ${report.progressPercent}%")
-                    logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
+                    logger.print("[UPLOAD PROGRESS] progress: ${report.progressPercent}%, rate in bit/s: ${report.transferRateBit}")
                     testListener.onProgress(report.progressPercent.toDouble(), report.transferRateBit.toDouble())
                 }
             }
         )
-        logger.print("After Testing")
+        logger.print("After Testing Upload")
     }
 
     private fun testDownloadSpeed(
@@ -400,13 +423,14 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
         testServer: String,
         fileSize: Int
     ) {
+        logger.print("testDownloadSpeed: testServer=$testServer, fileSize=$fileSize")
         speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
             override fun onCompletion(report: SpeedTestReport) {
                 // Do nothing here
             }
 
             override fun onError(speedTestError: SpeedTestError, errorMessage: String) {
-                logger.print("OnError: ${speedTestError.name}, $errorMessage")
+                logger.print("Download OnError: ${speedTestError.name}, $errorMessage")
                 testListener.onError(errorMessage, speedTestError.name)
             }
 
@@ -414,50 +438,57 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                 // Do nothing here
             }
         })
+
+        logger.print("Starting download repeat test with timeout=$defaultTestTimeoutInMillis and responseDelay=$defaultResponseDelayInMillis")
         speedTestSocket.startDownloadRepeat(
             testServer,
             defaultTestTimeoutInMillis,
             defaultResponseDelayInMillis,
             object : IRepeatListener {
                 override fun onCompletion(report: SpeedTestReport) {
-                    logger.print("[COMPLETED] rate in bit/s   : " + report.transferRateBit)
+                    logger.print("[DOWNLOAD COMPLETED] rate in bit/s: ${report.transferRateBit}")
                     testListener.onComplete(report.transferRateBit.toDouble())
                 }
 
                 override fun onReport(report: SpeedTestReport) {
-                    logger.print("[PROGRESS] progress : ${report.progressPercent}%")
-                    logger.print("[PROGRESS] rate in bit/s   : " + report.transferRateBit)
+                    logger.print("[DOWNLOAD PROGRESS] progress: ${report.progressPercent}%, rate in bit/s: ${report.transferRateBit}")
                     testListener.onProgress(report.progressPercent.toDouble(), report.transferRateBit.toDouble())
                 }
             }
         )
-        logger.print("After Testing")
+        logger.print("After Testing Download")
     }
 
-    private fun cancelListening(args: Any, result: Result) {
+    private fun cancelListening(args: Any, result: MethodChannel.Result) {
         val currentListenerId = args as Int
+        logger.print("cancelListening for listenerId=$currentListenerId")
         activeListeners.remove(currentListenerId)
         val cancellationFlag = cancellationFlags[currentListenerId]
         if (cancellationFlag != null) {
+            logger.print("Setting cancellation flag for listenerId=$currentListenerId")
             cancellationFlag.set(true)
             cancellationFlags.remove(currentListenerId)
         }
         result.success(null)
     }
 
-    private fun cancelTasks(arguments: Any?, result: Result) {
-        Thread(Runnable {
+    private fun cancelTasks(arguments: Any?, result: MethodChannel.Result) {
+        logger.print("cancelTasks called with arguments: $arguments")
+        Thread {
             arguments?.let { args ->
                 val idsToCancel = args as List<Int>
                 try {
-                    idsToCancel.forEach { id ->
+                    for (id in idsToCancel) {
+                        logger.print("Cancelling test for id=$id")
                         val socket = activeSockets[id]
                         if (socket != null && socket.speedTestMode != SpeedTestMode.NONE) {
                             socket.forceStopTask()
                             activeSockets.remove(id)
+                            logger.print("Socket forced stopped for id=$id")
                         }
                         val cancellationFlag = cancellationFlags[id]
                         if (cancellationFlag != null) {
+                            logger.print("Setting cancellation flag for id=$id")
                             cancellationFlag.set(true)
                             cancellationFlags.remove(id)
                         }
@@ -468,16 +499,18 @@ class FlutterInternetSpeedTestPlugin : FlutterPlugin, MethodChannel.MethodCallHa
                                 is LatencyTestListener -> listener.onCancel()
                             }
                             activeListeners.remove(id)
+                            logger.print("Listener removed for id=$id")
                         }
                     }
                     result.success(true)
                 } catch (e: Exception) {
-                    e.localizedMessage?.let { logger.print(it) }
+                    e.localizedMessage?.let { logger.print("Error in cancelTasks: $it") }
                     result.success(false)
                 }
             } ?: run {
+                logger.print("No arguments provided to cancelTasks.")
                 result.success(false)
             }
-        }).start()
+        }.start()
     }
 }

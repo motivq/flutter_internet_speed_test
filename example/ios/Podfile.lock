@@ -25,11 +25,11 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/integration_test/ios"
 
 SPEC CHECKSUMS:
-  connectivity_plus: 18382e7311ba19efcaee94442b23b32507b20695
+  connectivity_plus: 4c41c08fc6d7c91f63bc7aec70ffe3730b04f563
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   flutter_internet_speed_test: 0fa50cf67c71323b8c61227e88b3a0f2478fbdef
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
 
 PODFILE CHECKSUM: c4c93c5f6502fe2754f48404d3594bf779584011
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.15.2
